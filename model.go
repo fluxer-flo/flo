@@ -22,6 +22,10 @@ var idEpoch = func() time.Time {
 	return time
 }()
 
+func NewID(timestamp time.Time) ID {
+	return ID((timestamp.Sub(idEpoch).Milliseconds()) << 22)
+}
+
 func (id ID) CreatedAt() time.Time {
 	return idEpoch.Add(time.Millisecond * time.Duration(id>>22))
 }

@@ -267,10 +267,12 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		httpReq.Body = body
 		httpReq.Header.Set("Content-Type", contentType)
 	} else if req.Payload != nil {
-		body, err := json.Marshal(req.Payload)
+		body, err := json.MarshalIndent(req.Payload, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload JSON: %w", err)
 		}
+
+		fmt.Println(string(body))
 
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 		httpReq.Header.Set("Content-Type", "application/json")
@@ -349,7 +351,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 	return resp, nil
 }
 
-func (r *REST) RequestJSON(ctx context.Context, result any, req RESTRequest) error {
+func (r *REST) RequestJSON(ctx context.Context, req RESTRequest, result any) error {
 	resp, err := r.Request(ctx, req)
 	if err != nil {
 		return err

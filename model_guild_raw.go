@@ -33,7 +33,25 @@ type rawGuild struct {
 	MessageHistoryCutoff  time.Time                  `json:"message_history_cutoff"`
 }
 
-func (g *Guild) update(guild rawGuild) {
+func cacheGuild(cache Cache, guild *rawGuild) Guild {
+	var result Guild
+
+	if cache.Guilds != nil {
+		hit := cache.Guilds.Update(guild.ID, func(cached *Guild) {
+			cached.update(guild)
+			result = *cached
+		})
+		if hit {
+			return result
+		}
+	}
+
+	result.ID = guild.ID
+	result.update(guild)
+	return result
+}
+
+func (g *Guild) update(guild *rawGuild) {
 	g.Name = guild.Name
 	g.Icon = guild.Icon
 	g.Banner = guild.Banner

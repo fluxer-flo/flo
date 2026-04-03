@@ -9,6 +9,8 @@ type Cache struct {
 	// This function should simply return a guild with the [Collection]s set for whatever caching is desired.
 	// Without this the [Collection]s on the guild will be nil.
 	MakeGuild func(ID) Guild
+	// Users is used to cache users if it is not nil.
+	Users Collection[User]
 }
 
 // NewDefaultCache returns a Cache which prioritises out-of-the-box usability.
@@ -20,5 +22,6 @@ func NewDefaultCache() Cache {
 				Channels: NewCollection[Channel](),
 			}
 		},
+		Users: NewCollection[User](),
 	}
 }

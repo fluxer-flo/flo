@@ -18,10 +18,12 @@ func (u *User) CreatedAt() time.Time {
 	return u.ID.CreatedAt()
 }
 
+// Tag returns a string of Username#Discriminator.
 func (u *User) Tag() string {
 	return u.Username + "#" + u.Discriminator
 }
 
+// DisplayName returns the rendered name in chat outside of any guilds.
 func (u *User) DisplayName() string {
 	if u.GlobalName != nil {
 		return *u.GlobalName
@@ -30,6 +32,8 @@ func (u *User) DisplayName() string {
 	}
 }
 
+// IsDeleted returns true if the user is a placeholder for a deleted user.
+// This is currently indicated by a tag of DeletedUser#0000.
 func (u *User) IsDeleted() bool {
 	// this appears to be a reliable indicator of deleted user:
 	// https://fluxer.app/channels/1427764813854588940/1483532018185537313/1489339598513306876

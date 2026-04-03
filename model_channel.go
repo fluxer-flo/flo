@@ -20,7 +20,7 @@ type Channel struct {
 	UserLimit        *int
 	RTCRegion        *string
 	LastMessageID    *ID
-	LastPinTimestamp *time.Time
+	LastPinAt        *time.Time
 	PermOverwrites   []ChannelPermOverwrite
 	Recipients       []any
 	NSFW             *bool
@@ -36,12 +36,12 @@ func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
 
-func (c *Channel) SendMessage(ctx context.Context, rest *REST, msg SendMessageOpts) (Message, error) {
-	return rest.SendMessage(ctx, c.ID, msg)
+func (c *Channel) SendMessage(rest *REST, ctx context.Context, opts SendMessageOpts) (Message, error) {
+	return rest.SendMessage(ctx, c.ID, opts)
 }
 
-func (c *Channel) SendMessageContent(ctx context.Context, rest *REST, msg string) (Message, error) {
-	return rest.SendMessageContent(ctx, c.ID, msg)
+func (c *Channel) SendMessageContent(rest *REST, ctx context.Context, content string) (Message, error) {
+	return rest.SendMessageContent(ctx, c.ID, content)
 }
 
 type ChannelType uint
