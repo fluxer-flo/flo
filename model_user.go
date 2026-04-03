@@ -3,15 +3,15 @@ package flo
 import "time"
 
 type User struct {
-	ID            ID
-	Username      string
-	Discriminator string
-	GlobalName    *string
-	Avatar        *string
-	AvatarColor   *ColorInt
-	Bot           bool
-	System        bool
-	Flags         UserFlags
+	ID            ID        `json:"id"`
+	Username      string    `json:"username"`
+	Discriminator string    `json:"discriminator"`
+	GlobalName    *string   `json:"global_name"`
+	Avatar        *string   `json:"avatar"`
+	AvatarColor   *ColorInt `json:"avatar_color"`
+	Bot           bool      `json:"bot"`
+	System        bool      `json:"system"`
+	Flags         UserFlags `json:"flags"`
 }
 
 func (u *User) CreatedAt() time.Time {

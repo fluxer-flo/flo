@@ -6,26 +6,26 @@ import (
 )
 
 type Channel struct {
-	ID               ID
-	GuildID          ID
-	Name             *string
-	Topic            *string
-	URL              *string
-	Icon             *string
-	OwnerID          *string
-	Type             ChannelType
-	Position         *int
-	ParentID         *ID
-	Bitrate          *int
-	UserLimit        *int
-	RTCRegion        *string
-	LastMessageID    *ID
-	LastPinAt        *time.Time
-	PermOverwrites   []ChannelPermOverwrite
-	Recipients       []any
-	NSFW             *bool
-	RateLimitPerUser *int
-	Nicks            map[ID]string
+	ID               ID                     `json:"id"`
+	GuildID          ID                     `json:"guild_id"`
+	Name             *string                `json:"name"`
+	Topic            *string                `json:"topic"`
+	URL              *string                `json:"url"`
+	Icon             *string                `json:"icon"`
+	OwnerID          *string                `json:"owner_id"`
+	Type             ChannelType            `json:"type"`
+	Position         *int                   `json:"position"`
+	ParentID         *ID                    `json:"parent_id"`
+	Bitrate          *int                   `json:"bitrate"`
+	UserLimit        *int                   `json:"user_limit"`
+	RTCRegion        *string                `json:"rtc_region"`
+	LastMessageID    *ID                    `json:"last_message_id"`
+	LastPinAt        *time.Time             `json:"last_pin_timestamp"`
+	PermOverwrites   []ChannelPermOverwrite `json:"permission_overwrites"`
+	Recipients       []any                  `json:"recipients"`
+	NSFW             *bool                  `json:"nsfw"`
+	RateLimitPerUser *int                   `json:"rate_limit_per_user"`
+	Nicks            map[ID]string          `json:"nicks"`
 }
 
 func (c *Channel) CreatedAt() time.Time {
@@ -78,8 +78,8 @@ const (
 )
 
 type ChannelPermOverwrite struct {
-	ID    ID
-	Type  ChannelPermOverwriteType
-	Allow Perms
-	Deny  Perms
+	ID    ID                       `json:"id"`
+	Type  ChannelPermOverwriteType `json:"type"`
+	Allow Perms                    `json:"allow"`
+	Deny  Perms                    `json:"deny"`
 }

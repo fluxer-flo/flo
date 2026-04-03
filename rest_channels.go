@@ -8,60 +8,56 @@ import (
 
 // SendMessageOpts specifies a message to send.
 type SendMessageOpts struct {
-	Content string
-	Embeds  []EmbedOpts
+	Content string      `json:"content,omitempty"`
+	Embeds  []EmbedOpts `json:"embeds,omitempty"`
 }
 
 // EmbedOpts specifies a rich embed when sending or editing a message.
 type EmbedOpts struct {
-	URL         string
-	Title       string
-	Color       ColorInt
-	Timestamp   time.Time
-	Description string
-	Author      EmbedAuthorOpts
-	Image       EmbedMediaOpts
-	Thumbnail   EmbedMediaOpts
-	Footer      EmbedFooterOpts
-	Fields      []EmbedField
+	URL         string          `json:"url,omitempty"`
+	Title       string          `json:"title,omitempty"`
+	Color       ColorInt        `json:"color,omitzero"`
+	Timestamp   time.Time       `json:"timestamp,omitzero"`
+	Description string          `json:"description,omitempty"`
+	Author      EmbedAuthorOpts `json:"author,omitzero"`
+	Image       EmbedMediaOpts  `json:"image,omitzero"`
+	Thumbnail   EmbedMediaOpts  `json:"thumbnail,omitzero"`
+	Footer      EmbedFooterOpts `json:"footer,omitzero"`
+	Fields      []EmbedField    `json:"fields,omitempty"`
 }
 
 // EmbedAuthorOpts specifies an embed author when sending or editing a message.
 type EmbedAuthorOpts struct {
-	Name    string
-	URL     string
-	IconURL string
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	IconURL string  `json:"icon_url"`
 }
 
 // EmbedAuthorOpts specifies embed media when sending or editing a message.
 type EmbedMediaOpts struct {
-	URL         string
-	Description string
+	URL         string `json:"url"`
+	Description string `json:"description"`
 }
 
 // EmbedAuthorOpts specifies an embed footer when sending or editing a message.
 type EmbedFooterOpts struct {
-	Text    string
-	IconURL string
+	Text    string `json:"text"`
+	IconURL string `json:"icon_url"`
 }
 
 func (r *REST) SendMessage(ctx context.Context, channel ID, opts SendMessageOpts) (Message, error) {
-	var resp rawMessage
+	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:  "POST",
 		Path:    fmt.Sprintf("/v1/channels/%d/messages", channel),
 		Bucket:  fmt.Sprintf("channel:message:create:%d", channel),
-		Payload: opts.toRaw(),
+		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Message{}, err
 	}
 
-	var msg Message
-	msg.ID = resp.ID
-	msg.update(r.Cache, &resp)
-
-	return msg, nil
+	return resp, nil
 }
 
 func (r *REST) SendMessageContent(ctx context.Context, channel ID, content string) (Message, error) {

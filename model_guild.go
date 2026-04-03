@@ -3,40 +3,46 @@ package flo
 import "time"
 
 type Guild struct {
-	ID                    ID
-	Name                  string
-	Icon                  *string
-	Banner                *string
-	BannerWidth           *int
-	BannerHeight          *int
-	Splash                *string
-	SplashWidth           *int
-	SplashHeight          *int
-	SplashCardAlignment   GuildSplashCardAlignment
-	EmbedSplash           *string
-	EmbedSplashWidth      *int
-	EmbedSplashHeight     *int
-	VanityURLCode         *string
-	OwnerID               ID
-	SystemChannelID       *ID
-	SystemChannelFlags    GuildSystemChannelFlags
-	RulesChannelID        *ID
-	AFKChannelID          *ID
-	AFKTimeout            time.Duration
-	Features              []GuildFeature
-	VerifLevel            GuildVerifLevel
-	MFALevel              GuildMFALevel
-	NSFWLevel             GuildNSFWLevel
-	ExplicitContentFilter GuildExplicitContentFilter
-	DefaultMessageNotifs  UserNofifSettings
-	DisabledOperations    GuildOperations
-	MessageHistoryCutoff  time.Time
+	ID                    ID                         `json:"id"`
+	Name                  string                     `json:"name"`
+	Icon                  *string                    `json:"icon"`
+	Banner                *string                    `json:"banner"`
+	BannerWidth           *int                       `json:"banner_width"`
+	BannerHeight          *int                       `json:"banner_height"`
+	Splash                *string                    `json:"splash"`
+	SplashWidth           *int                       `json:"splash_width"`
+	SplashHeight          *int                       `json:"splash_height"`
+	SplashCardAlignment   GuildSplashCardAlignment   `json:"splash_card_alignment"`
+	EmbedSplash           *string                    `json:"embed_splash"`
+	EmbedSplashWidth      *int                       `json:"embed_splash_width"`
+	EmbedSplashHeight     *int                       `json:"embed_splash_height"`
+	VanityURLCode         *string                    `json:"vanity_url_code"`
+	OwnerID               ID                         `json:"owner_id"`
+	SystemChannelID       *ID                        `json:"system_channel_id"`
+	SystemChannelFlags    GuildSystemChannelFlags    `json:"system_channel_flags"`
+	RulesChannelID        *ID                        `json:"rules_channel_id"`
+	AFKChannelID          *ID                        `json:"afk_channel_id"`
+	AFKTimeoutSecs        int                        `json:"afk_timeout"`
+	Features              []GuildFeature             `json:"features"`
+	VerifLevel            GuildVerifLevel            `json:"verification_level"`
+	MFALevel              GuildMFALevel              `json:"mfa_level"`
+	NSFWLevel             GuildNSFWLevel             `json:"nsfw_level"`
+	ExplicitContentFilter GuildExplicitContentFilter `json:"explicit_content_filter"`
+	DefaultMessageNotifs  UserNofifSettings          `json:"default_message_notifs"`
+	DisabledOperations    GuildOperations            `json:"disabled_operations"`
+	MessageHistoryCutoff  time.Time                  `json:"message_history_cutoff"`
 
-	Channels Collection[Channel]
+	Channels Collection[Channel] `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
+}
+
+func (g *Guild) updateREST(guild *Guild) {
+	oldChannels := g.Channels
+	*g = *guild
+	g.Channels = oldChannels
 }
 
 type GuildSplashCardAlignment uint
