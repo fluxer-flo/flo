@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
 // ID represents an ID on Fluxer, which contains an embedded timestamp.
@@ -22,6 +20,8 @@ var idEpoch = func() time.Time {
 	return time
 }()
 
+// NewID creates a new dummy ID with the timestamp provided.
+// Two IDs created this way will be identical.
 func NewID(timestamp time.Time) ID {
 	return ID((timestamp.Sub(idEpoch).Milliseconds()) << 22)
 }
@@ -50,184 +50,273 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 }
 
 // ColorInt represents a Fluxer RGB color value.
-// ColorInt(0xRRGGBB) can be used to create a color.
+// 0xRRGGBB can be used to create a color.
 type ColorInt uint32
 
-// A Collection is a thread-safe set of Fluxer entities looked up by ID.
-// New methods may be added without a major release!
-// Creating your own implementation of this interface is not supported and is done at your own risk!
-type Collection[T any] interface {
-	// Len returns the number of items in the collection.
-	Len() int
-	// Keys returns a list of the IDs in the collection.
-	// No particular order is guaranteed.
-	Keys() []ID
-	Get(key ID) (T, bool)
-	Contains(key ID) bool
-
-	Set(key ID, val T)
-	// Update allows safely updating an item while preventing any concurrent read/write access.
-	Update(key ID, update func(val *T)) bool
-	Delete(key ID) bool
-
-	// NOTE: the reason for not providing any iteration methods is that it seems like a bit of a footgun
-	// if long running functions are called in the loop due to locking
+// A Collection is a possibly-limited thread-safe set of Fluxer entities looked up by ID.
+// The zero value does not allow anything to be inserted.
+// Assigning a new collection to an existing one is not a safe operation.
+type Collection[T any] struct {
+	limit   int
+	lookup  map[ID]*collectionEntry[T]
+	lru     *lruNode // least recently used
+	lruTail *lruNode // most recently used
+	mu      sync.RWMutex
 }
 
-// NewCollection returns a collection which will not automatically delete any items.
-func NewCollection[T any]() Collection[T] {
-	return &unlimitedCollection[T]{
-		lookup: map[ID]*T{},
+// NewCollection creates a new collection with a limited amount of items.
+// If the limit is reached, the least recently used item will be removed upon adding a new item.
+// Passing a limit under 0 will result in a panic.
+// Use [NewCollectionUnlimited] if you don't want to number of items to be limited.
+func NewCollection[T any](limit int) Collection[T] {
+	if limit < 0 {
+		panic("limit may not be negative")
+	}
+
+	return Collection[T]{limit: limit}
+}
+
+// NewCollectionUnlimited creates a new collection which can hold an unlimited amount of items.
+func NewCollectionUnlimited[T any]() Collection[T] {
+	return Collection[T]{limit: -1}
+}
+
+type collectionEntry[T any] struct {
+	val T
+	lru *lruNode
+}
+
+type lruNode struct {
+	id   ID
+	prev *lruNode
+	next *lruNode
+}
+
+// removeFromLRU removes an LRU node from the list, assming it is not nil.
+func (c *Collection[T]) removeFromLRU(node *lruNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+	}
+
+	if node.next != nil {
+		node.next.prev = node.prev
+	}
+	
+	if c.lru == node {
+		c.lru = node.next
+	}
+
+	if c.lruTail == node {
+		c.lruTail = node.prev
 	}
 }
 
-// NewLimitedCollection returns a collection which will hold up to the provided count of items before removing older times.
-func NewLimitedCollection[T any](limit int) (Collection[T], error) {
-	lookup, err := simplelru.NewLRU[ID, *T](limit, nil)
-	if err != nil {
-		return nil, err
+// moveToLRUTail moves an LRU node to the end of the list, assuming it is not nil.
+func (c *Collection[T]) moveToLRUTail(node *lruNode) {
+	if node.next == nil {
+		// already at tail
+		return
 	}
 
-	return &limitedCollection[T]{lookup: *lookup}, nil
+	c.removeFromLRU(node)
+
+	node.prev = c.lruTail
+	node.next = nil
+
+	c.lruTail = node
 }
 
-type unlimitedCollection[T any] struct {
-	lookup map[ID]*T
-	mu     sync.RWMutex
+// addToLRUTail creates a new LRU node at the end of the list. This should not be called if limit <= 0.
+func (c *Collection[T]) addToLRUTail(id ID) *lruNode {
+	if len(c.lookup) > c.limit {
+		panic("collection lookup size went over limit! something is very wrong!")
+	} else if len(c.lookup) == c.limit {
+		delete(c.lookup, c.lru.id)
+		c.lru = c.lru.next
+	}
+
+	newTail := &lruNode{id: id, prev: c.lruTail}
+
+	if c.lru == nil {
+		c.lru = newTail
+	}
+
+	if c.lruTail != nil {
+		c.lruTail.next = newTail
+	}
+
+	c.lruTail = newTail
+	return newTail
 }
 
-func (c *unlimitedCollection[T]) Len() int {
+func (c *Collection[T]) Limit() (int, bool) {
+	if c.limit >= 0 {
+		return c.limit, true
+	} else {
+		return 0, false
+	}
+}
+
+func (c *Collection[T]) Len() int {
+	if c == nil || c.limit == 0 {
+		return 0
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return len(c.lookup)
 }
 
-func (c *unlimitedCollection[T]) Keys() []ID {
+func (c *Collection[T]) Keys() []ID {
+	if c == nil || c.limit == 0 {
+		return nil
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if len(c.lookup) == 0 {
+		return nil
+	}
+
 	result := make([]ID, 0, len(c.lookup))
-	for key := range c.lookup {
-		result = append(result, key)
+	for id := range c.lookup {
+		result = append(result, id)
 	}
 
 	return result
 }
 
-func (c *unlimitedCollection[T]) Get(key ID) (T, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	val, ok := c.lookup[key]
-	if !ok {
+func (c *Collection[T]) Get(id ID) (T, bool) {
+	if c == nil || c.limit == 0 {
 		var t T
 		return t, false
 	}
 
-	return *val, true
+	if c.limit < 0 {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+
+		if c.lookup == nil {
+			var t T
+			return t, false
+		}
+
+		entry, ok := c.lookup[id]
+		return entry.val, ok
+	} else {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		if c.lookup == nil {
+			var t T
+			return t, false
+		}
+
+		if entry, ok := c.lookup[id]; ok {
+			if entry.lru != nil {
+				c.moveToLRUTail(entry.lru)
+			}
+
+			return entry.val, true
+		} else {
+			var t T
+			return t, false
+		}
+	}
 }
 
-func (c *unlimitedCollection[T]) Contains(key ID) bool {
+func (c *Collection[T]) Contains(id ID) bool {
+	if c == nil || c.limit == 0 {
+		return false
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	_, ok := c.lookup[key]
+	if c.lookup == nil {
+		return false
+	}
+
+	_, ok := c.lookup[id]
 	return ok
 }
 
-func (c *unlimitedCollection[T]) Set(key ID, val T) {
+func (c *Collection[T]) Set(id ID, val T) {
+	if c == nil || c.limit == 0 {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.lookup[key] = &val
+	if c.lookup == nil {
+		c.lookup = map[ID]*collectionEntry[T]{}
+	}
+
+	if entry, ok := c.lookup[id]; ok {
+		entry.val = val
+		if entry.lru != nil {
+			c.moveToLRUTail(entry.lru)
+		}
+		return
+	}
+
+	entry := &collectionEntry[T]{val: val}
+	if c.limit > 0 {
+		entry.lru = c.addToLRUTail(id)
+	}
+
+	c.lookup[id] = entry
 }
 
-func (c *unlimitedCollection[T]) Update(key ID, update func(val *T)) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if val, ok := c.lookup[key]; ok {
-		update(val)
-		return true
-	} else {
+func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
+	if c == nil || c.limit == 0 {
 		return false
 	}
-}
 
-func (c *unlimitedCollection[T]) Delete(key ID) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, ok := c.lookup[key]; ok {
-		delete(c.lookup, key)
-		return true
-	} else {
+	if c.lookup == nil {
 		return false
 	}
-}
 
-type limitedCollection[T any] struct {
-	lookup simplelru.LRU[ID, *T]
-	mu     sync.RWMutex
-}
-
-func (c *limitedCollection[T]) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.lookup.Len()
-}
-
-func (c *limitedCollection[T]) Keys() []ID {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.lookup.Keys()
-}
-
-func (c *limitedCollection[T]) Get(key ID) (T, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	val, ok := c.lookup.Get(key)
+	entry, ok := c.lookup[id]
 	if !ok {
-		var t T
-		return t, false
-	}
-
-	return *val, true
-}
-
-func (c *limitedCollection[T]) Contains(key ID) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.lookup.Contains(key)
-}
-
-func (c *limitedCollection[T]) Set(key ID, value T) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.lookup.Add(key, &value)
-}
-
-func (c *limitedCollection[T]) Update(key ID, update func(value *T)) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if val, ok := c.lookup.Get(key); ok {
-		update(val)
-		return true
-	} else {
 		return false
 	}
+
+	if entry.lru != nil {
+		c.moveToLRUTail(entry.lru)
+	}
+
+	update(&entry.val)
+	return true
 }
 
-func (c *limitedCollection[T]) Delete(key ID) bool {
+func (c *Collection[T]) Delete(id ID) bool {
+	if c == nil || c.limit == 0 {
+		return false
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.lookup.Remove(key)
+	if c.lookup == nil {
+		return false
+	}
+
+	entry, ok := c.lookup[id]
+	if !ok {
+		return false
+	}
+
+	if entry.lru != nil {
+		c.removeFromLRU(entry.lru)
+	}
+
+	delete(c.lookup, id)
+	return true
 }

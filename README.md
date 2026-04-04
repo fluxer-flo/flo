@@ -6,17 +6,17 @@ User-API related things may also be considered in the future.
 ```go
 token := "Bot " + os.Getenv("FLUXER_TOKEN")
 
-cache := flo.DefaultCache()
+cache := flo.NewCacheDefault()
 // don't wanna cache something? just set it to nil!
 
 rest := flo.REST{
     Auth:  token,
-    Cache: cache,
+    Cache: &cache,
 }
 
 gateway := flo.Gateway{
     Auth:  token,
-    Cache: cache,
+    Cache: &cache,
 }
 
 gateway.Ready.Once(func(r flo.ReadyEvent) {

@@ -32,7 +32,7 @@ type Guild struct {
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
 	MessageHistoryCutoff  time.Time                  `json:"message_history_cutoff"`
 
-	Channels Collection[Channel] `json:"-"`
+	Channels *Collection[Channel] `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {

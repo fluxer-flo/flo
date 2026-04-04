@@ -16,7 +16,7 @@ func (r *REST) GetGuild(ctx context.Context, id ID) (Guild, error) {
 		return Guild{}, err
 	}
 
-	if r.Cache.Guilds != nil {
+	if r.Cache != nil {
 		r.Cache.Guilds.Update(result.ID, func(guild *Guild) {
 			guild.updateREST(&result)
 			result = *guild

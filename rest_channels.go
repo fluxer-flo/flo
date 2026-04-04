@@ -30,7 +30,7 @@ type EmbedOpts struct {
 type EmbedAuthorOpts struct {
 	Name    string `json:"name"`
 	URL     string `json:"url"`
-	IconURL string  `json:"icon_url"`
+	IconURL string `json:"icon_url"`
 }
 
 // EmbedAuthorOpts specifies embed media when sending or editing a message.

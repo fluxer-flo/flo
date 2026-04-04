@@ -23,8 +23,8 @@ type REST struct {
 	Auth string
 	// UserAgent overrides the used User Agent.
 	UserAgent string
-	// Cache specifies the caching behaviour. If not specified, nothing is cached.
-	Cache Cache
+	// Cache specifies the caching target. If nil is specified, nothing is cached.
+	Cache *Cache
 	// Client allows configuring the underlying HTTP client.
 	Client http.Client
 	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.
