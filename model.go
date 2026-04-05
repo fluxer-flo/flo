@@ -55,7 +55,7 @@ type ColorInt uint32
 
 // A Collection is a possibly-limited thread-safe set of Fluxer entities looked up by ID.
 // The zero value does not allow anything to be inserted.
-// Assigning a new collection to an existing one is not a safe operation.
+// Assigning a new collection to an existing one is not a thread-safe operation.
 type Collection[T any] struct {
 	limit   int
 	lookup  map[ID]*collectionEntry[T]
@@ -149,14 +149,16 @@ func (c *Collection[T]) addToLRUTail(id ID) *lruNode {
 	return newTail
 }
 
+// Limit returns the item limit if the collection is limited. Otherwise it returns -1, false.
 func (c *Collection[T]) Limit() (int, bool) {
 	if c.limit >= 0 {
 		return c.limit, true
 	} else {
-		return 0, false
+		return -1, false
 	}
 }
 
+// Len returns the number of items in the collection.
 func (c *Collection[T]) Len() int {
 	if c == nil || c.limit == 0 {
 		return 0
@@ -168,7 +170,8 @@ func (c *Collection[T]) Len() int {
 	return len(c.lookup)
 }
 
-func (c *Collection[T]) Keys() []ID {
+// IDs returns the item IDs in the collection. The order is effectively random.
+func (c *Collection[T]) IDs() []ID {
 	if c == nil || c.limit == 0 {
 		return nil
 	}
@@ -188,6 +191,8 @@ func (c *Collection[T]) Keys() []ID {
 	return result
 }
 
+// Get returns a value in the collection by ID.
+// It marks the item as most recently used if a limit is set.
 func (c *Collection[T]) Get(id ID) (T, bool) {
 	if c.limit == 0 {
 		var t T
@@ -227,6 +232,8 @@ func (c *Collection[T]) Get(id ID) (T, bool) {
 	}
 }
 
+// Contains returns true if an item with the specified ID is included in the collection.
+// It does not update the item's recency.
 func (c *Collection[T]) Contains(id ID) bool {
 	if c.limit == 0 {
 		return false
@@ -243,6 +250,8 @@ func (c *Collection[T]) Contains(id ID) bool {
 	return ok
 }
 
+// Set adds or updates the item with the specified ID in the collection. 
+// It marks the item as most recently used if a limit is set.
 func (c *Collection[T]) Set(id ID, val T) {
 	if c.limit == 0 {
 		return
@@ -271,6 +280,9 @@ func (c *Collection[T]) Set(id ID, val T) {
 	c.lookup[id] = entry
 }
 
+// Update allows safely updating the item with the specified ID from the collection through a pointer if it is present.
+// It marks the item as most recently used if a limit is set.
+// Copying the value is fine, but the pointer should not be copied outside the closure.
 func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 	if c.limit == 0 {
 		return false
@@ -296,6 +308,7 @@ func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 	return true
 }
 
+// Delete removes the item with the specified ID from the collection.
 func (c *Collection[T]) Delete(id ID) bool {
 	if c.limit == 0 {
 		return false
