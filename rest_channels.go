@@ -45,13 +45,21 @@ type EmbedFooterOpts struct {
 	IconURL string `json:"icon_url,omitempty"`
 }
 
-func (r *REST) SendMessage(ctx context.Context, channel ID, opts SendMessageOpts) (Message, error) {
+func rateLimitCreateMessage(channelID ID) RateLimitConfig {
+	return RateLimitConfig{
+		Bucket: fmt.Sprintf("channel:message:create:%d", channelID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) SendMessage(ctx context.Context, channelID ID, opts SendMessageOpts) (Message, error) {
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:  "POST",
-		Path:    fmt.Sprintf("/v1/channels/%d/messages", channel),
-		Bucket:  fmt.Sprintf("channel:message:create:%d", channel),
-		Payload: opts,
+		Method:    "POST",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages", channelID),
+		RateLimit: rateLimitCreateMessage(channelID),
+		Payload:   opts,
 	}, &resp)
 	if err != nil {
 		return Message{}, err
@@ -68,16 +76,24 @@ func (r *REST) SendMessage(ctx context.Context, channel ID, opts SendMessageOpts
 	return resp, nil
 }
 
-func (r *REST) SendMessageContent(ctx context.Context, channel ID, content string) (Message, error) {
-	return r.SendMessage(ctx, channel, SendMessageOpts{
+func (r *REST) SendMessageContent(ctx context.Context, channelID ID, content string) (Message, error) {
+	return r.SendMessage(ctx, channelID, SendMessageOpts{
 		Content: content,
 	})
 }
 
-func (r *REST) DeleteMessage(ctx context.Context, channel ID, message ID) error {
+func rateLimitDeleteMessage(channelID ID) RateLimitConfig {
+	return RateLimitConfig{
+		Bucket: fmt.Sprintf("channel:message:delete:%d", channelID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) DeleteMessage(ctx context.Context, channelID ID, messageID ID) error {
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method: "DELETE",
-		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d", channel, message),
-		Bucket: fmt.Sprintf("channel:message:delete:%d", channel),
+		Method:    "DELETE",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		RateLimit: rateLimitDeleteMessage(channelID),
 	})
 }

@@ -12,12 +12,11 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 )
 
-// REST is used to make REST requests to the Fluxer API, respecting ratelimiting headers and updating cache.
+// REST is used to make REST requests to the Fluxer API, respecting rate limits and updating cache.
 type REST struct {
 	// Auth specifies the authentication header to use. For most endpoints, it is required.
 	Auth string
@@ -30,122 +29,8 @@ type REST struct {
 	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.
 	BaseURL *url.URL
 
-	buckets   map[string]*rateLimitBucket
-	bucketsMu sync.RWMutex
-}
-
-type rateLimitBucket struct {
-	limit       uint32
-	remaining   uint32
-	resetAt     time.Time
-	batchQueued bool
-	backlog     []chan<- struct{}
-	mu          sync.Mutex
-}
-
-func (b *rateLimitBucket) queueNextBatch() {
-	// if b.batchQueued {
-	// 	return
-	// }
-	//
-	// if b.resetAt.IsZero() {
-	// 	return
-	// }
-	//
-	// resetAt := b.resetAt
-	//
-	// go func() {
-	// 	time.Sleep(time.Now().Sub(resetAt))
-	//
-	// 	b.mu.Lock()
-	//
-	// 	b.batchQueued = false
-	//
-	// 	var batch []chan<- struct{}
-	// 	if backlogLen := uint(len(b.backlog)); backlogLen <= b.limit {
-	// 		b.remaining = b.limit - backlogLen
-	// 		batch = b.backlog
-	// 		b.backlog = nil
-	// 	} else {
-	// 		b.remaining = 0
-	// 		batch = b.backlog[:b.limit]
-	// 		b.backlog = b.backlog[b.limit:]
-	// 	}
-	//
-	// 	if b.resetAt.After(resetAt) {
-	// 		b.queueNextBatch()
-	// 	} else {
-	// 		// NOTE: this means another queue won't be triggered until the true resetAt time is available
-	// 		b.resetAt = time.Time{}
-	// 	}
-	//
-	// 	b.mu.Unlock()
-	//
-	// 	for _, sig := range batch {
-	// 		sig <- struct{}{}
-	// 	}
-	// }()
-}
-
-func (b *rateLimitBucket) acquire(ctx context.Context) error {
-	// b.mu.Lock()
-	// defer b.mu.Unlock()
-	//
-	// if b.remaining == 0 {
-	// 	sig := make(chan struct{}, 1)
-	//
-	// 	b.backlog = append(b.backlog, sig)
-	//
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		close(sig)
-	// 		return ctx.Err()
-	// 	case <-sig:
-	// 		return nil
-	// 	}
-	// } else {
-	// 	b.remaining--
-	// 	return nil
-	// }
-	return nil
-}
-
-func (b *rateLimitBucket) sync(limit uint32, remaining uint32, resetAt time.Time) {
-	// b.mu.Lock()
-	// defer b.mu.Unlock()
-	//
-	// b.limit = limit
-	//
-	// if !b.batchQueued {
-	// 	// NOTE: if a batch is queued we want things to keep getting added to the backlog for the sake of fairness
-	// 	b.remaining = remaining
-	// }
-	//
-	//
-	// if resetAt.After(b.resetAt) {
-	// 	b.resetAt = resetAt
-	// 	// NOTE: if a batch is already queued, the resetAt time being moved forward will queue another queue
-	// 	b.queueNextBatch()
-	// }
-}
-
-func (r *REST) getBucket(key string) *rateLimitBucket {
-	r.bucketsMu.Lock()
-	defer r.bucketsMu.Unlock()
-
-	if r.buckets == nil {
-		r.buckets = map[string]*rateLimitBucket{}
-	}
-
-	bucket, ok := r.buckets[key]
-	if !ok {
-		bucket = &rateLimitBucket{
-			remaining: 1,
-		}
-		r.buckets[key] = bucket
-	}
-
-	return bucket
+	buckets   map[RateLimitConfig]rateLimitBucket
+	bucketsMu sync.Mutex
 }
 
 type RESTFormField struct {
@@ -155,13 +40,9 @@ type RESTFormField struct {
 }
 
 type RESTRequest struct {
-	Method string
-	Path   string
-	// Bucket specifies a string to be used to ratelimit the request together with other requests using the same string.
-	// If this is not provided, the request will not be ratelimited.
-	// Appropriate bucket strings can easily be found within [the Fluxer backend] at the time of writing.
-	// [the Fluxer backend]: https://github.com/fluxerapp/fluxer/tree/refactor/packages/api/src/rate_limit_configs
-	Bucket string
+	Method    string
+	Path      string
+	RateLimit RateLimitConfig
 
 	// Payload specifies a JSON body.
 	// If used in combination with Form, it will be added as payload_json.
@@ -171,6 +52,62 @@ type RESTRequest struct {
 	Form []RESTFormField
 
 	AuditLogReason string
+}
+
+// RateLimitConfig specifies options to be used to rate limit the request together with other requests using the same config..
+// If bucket is not provided, the request will not be rate limited.
+// Appropriate rate limit configs can easily be found within [the Fluxer backend] at the time of writing.
+// [the Fluxer backend]: https://github.com/fluxerapp/fluxer/tree/refactor/packages/api/src/rate_limit_configs
+type RateLimitConfig struct {
+	Bucket string
+	Limit  int
+	Window time.Duration
+}
+
+type rateLimitBucket struct {
+	filled    int
+	leakStart time.Time
+}
+
+// acquireBucketSlot acquires a slot in the rate limit bucket, pausing if necessary.
+// An error is returned if the passed context is cancelled.
+func (r *REST) acquireBucketSlot(ctx context.Context, conf RateLimitConfig) error {
+	r.bucketsMu.Lock()
+
+	if r.buckets == nil {
+		r.buckets = map[RateLimitConfig]rateLimitBucket{}
+	}
+
+	bucket := r.buckets[conf]
+
+	rn := time.Now()
+
+	leakRate := conf.Window / time.Duration(conf.Limit)
+	effectiveFilled := bucket.filled - int(rn.Sub(bucket.leakStart)/leakRate)
+
+	if effectiveFilled <= 0 {
+		effectiveFilled = 0
+		bucket.leakStart = time.Now()
+	}
+
+	bucket.filled++
+	effectiveFilled++
+
+	r.buckets[conf] = bucket
+	r.bucketsMu.Unlock()
+
+	if effectiveFilled > conf.Limit {
+		refillDelay := time.Duration(effectiveFilled-conf.Limit)*leakRate + rn.Sub(bucket.leakStart)%leakRate
+
+		select {
+		case <-time.After(refillDelay):
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
 }
 
 func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
@@ -221,10 +158,8 @@ func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 
 // Request sends a Request to a Fluxer endpoint. If the returned error is nil, the response body should be closed.
 func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, error) {
-	var bucket *rateLimitBucket
-	if req.Bucket != "" {
-		bucket = r.getBucket(req.Bucket)
-		err := bucket.acquire(ctx)
+	if req.RateLimit.Bucket != "" {
+		err := r.acquireBucketSlot(ctx, req.RateLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -279,29 +214,6 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 	resp, err := r.Client.Do(httpReq)
 	if err != nil {
 		return nil, err
-	}
-
-	rateLimitLimit := resp.Header.Get("X-RateLimit-Limit")
-	rateLimitRemaining := resp.Header.Get("X-RateLimit-Remaining")
-	rateLimitReset := resp.Header.Get("X-RateLimit-Reset")
-	if bucket != nil && rateLimitLimit != "" && rateLimitRemaining != "" && rateLimitReset != "" {
-		// FIXME: resource leaks!!
-		limit, err := strconv.ParseUint(rateLimitLimit, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse X-RateLimit-Limit: %w", err)
-		}
-
-		remaining, err := strconv.ParseUint(rateLimitRemaining, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse X-RateLimit-Remaining: %w", err)
-		}
-
-		reset, err := strconv.ParseInt(rateLimitReset, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse X-RateLimit-Reset: %w", err)
-		}
-
-		bucket.sync(uint32(limit), uint32(remaining), time.UnixMilli(reset))
 	}
 
 	if resp.StatusCode >= 400 && resp.StatusCode <= 599 {

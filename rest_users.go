@@ -3,13 +3,22 @@ package flo
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
-func (r *REST) GetUser(ctx context.Context, id ID) (User, error) {
+func rateLimitReadUser(userID ID) RateLimitConfig {
+	return RateLimitConfig{
+		Bucket: fmt.Sprintf("users:read:%d", userID),
+		Limit:  100,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) GetUser(ctx context.Context, userID ID) (User, error) {
 	var result User
 	err := r.RequestJSON(ctx, RESTRequest{
-		Path:   fmt.Sprintf("/users/%d", id),
-		Bucket: fmt.Sprintf("users:read:%d", id),
+		Path:      fmt.Sprintf("/users/%d", userID),
+		RateLimit: rateLimitReadUser(userID),
 	}, &result)
 	if err != nil {
 		return User{}, nil
