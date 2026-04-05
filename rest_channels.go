@@ -29,20 +29,20 @@ type EmbedOpts struct {
 // EmbedAuthorOpts specifies an embed author when sending or editing a message.
 type EmbedAuthorOpts struct {
 	Name    string `json:"name"`
-	URL     string `json:"url"`
-	IconURL string `json:"icon_url"`
+	URL     string `json:"url,omitempty"`
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 // EmbedAuthorOpts specifies embed media when sending or editing a message.
 type EmbedMediaOpts struct {
 	URL         string `json:"url"`
-	Description string `json:"description"`
+	Description string `json:"description,omitempty"`
 }
 
 // EmbedAuthorOpts specifies an embed footer when sending or editing a message.
 type EmbedFooterOpts struct {
 	Text    string `json:"text"`
-	IconURL string `json:"icon_url"`
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 func (r *REST) SendMessage(ctx context.Context, channel ID, opts SendMessageOpts) (Message, error) {
@@ -55,6 +55,14 @@ func (r *REST) SendMessage(ctx context.Context, channel ID, opts SendMessageOpts
 	}, &resp)
 	if err != nil {
 		return Message{}, err
+	}
+
+	if r.Cache != nil {
+		r.Cache.Users.Set(resp.Author.ID, resp.Author)
+
+		for _, user := range resp.Mentions {
+			r.Cache.Users.Set(user.ID, user)
+		}
 	}
 
 	return resp, nil

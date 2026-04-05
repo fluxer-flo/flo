@@ -189,7 +189,7 @@ func (c *Collection[T]) Keys() []ID {
 }
 
 func (c *Collection[T]) Get(id ID) (T, bool) {
-	if c == nil || c.limit == 0 {
+	if c.limit == 0 {
 		var t T
 		return t, false
 	}
@@ -228,7 +228,7 @@ func (c *Collection[T]) Get(id ID) (T, bool) {
 }
 
 func (c *Collection[T]) Contains(id ID) bool {
-	if c == nil || c.limit == 0 {
+	if c.limit == 0 {
 		return false
 	}
 
@@ -244,7 +244,7 @@ func (c *Collection[T]) Contains(id ID) bool {
 }
 
 func (c *Collection[T]) Set(id ID, val T) {
-	if c == nil || c.limit == 0 {
+	if c.limit == 0 {
 		return
 	}
 
@@ -272,7 +272,7 @@ func (c *Collection[T]) Set(id ID, val T) {
 }
 
 func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
-	if c == nil || c.limit == 0 {
+	if c.limit == 0 {
 		return false
 	}
 
@@ -297,7 +297,7 @@ func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 }
 
 func (c *Collection[T]) Delete(id ID) bool {
-	if c == nil || c.limit == 0 {
+	if c.limit == 0 {
 		return false
 	}
 

@@ -36,7 +36,7 @@ func (u *User) DisplayName() string {
 // This is currently indicated by a tag of DeletedUser#0000.
 func (u *User) IsDeleted() bool {
 	// this appears to be a reliable indicator of deleted user:
-	// https://fluxer.app/channels/1427764813854588940/1483532018185537313/1489339598513306876
+	// https://web.fluxer.app/channels/1427764813854588940/1483532018185537313/1489339598513306876
 	return u.Username == "DeletedUser" && u.Discriminator == "0000"
 }
 
