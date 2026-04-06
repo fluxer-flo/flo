@@ -7,13 +7,16 @@ User-API related things may also be considered in the future.
 token := "Bot " + os.Getenv("FLUXER_TOKEN")
 
 cache := flo.NewCacheDefault()
-// don't wanna cache something? just set it to nil!
+// if you want to change the limit or avoid caching something entirely:
+// cache.Guilds = flo.NewCollection[Guild](0)
 
+// REST is used to perform actions through Fluxer's REST HTTP API
 rest := flo.REST{
     Auth:  token,
     Cache: &cache,
 }
 
+// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
 gateway := flo.Gateway{
     Auth:  token,
     Cache: &cache,

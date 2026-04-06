@@ -53,6 +53,10 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 // 0xRRGGBB can be used to create a color.
 type ColorInt uint32
 
+func (c ColorInt) String() string {
+	return fmt.Sprintf("#%06X", uint32(c))
+}
+
 // A Collection is a possibly-limited thread-safe set of Fluxer entities looked up by ID.
 // The zero value does not allow anything to be inserted.
 // Assigning a new collection to an existing one is not a thread-safe operation.

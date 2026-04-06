@@ -2,6 +2,8 @@ package flo
 
 import "time"
 
+//go:generate stringer -type=UserNotifSettings -output=model_user_string.go
+
 type User struct {
 	ID            ID        `json:"id"`
 	Username      string    `json:"username"`
@@ -51,11 +53,11 @@ const (
 	UserFlagFriendlyBotManualApproval UserFlags = 1 << 5
 )
 
-type UserNofifSettings uint
+type UserNotifSettings uint
 
 const (
-	UserNotifSettingsAllMessages  UserNofifSettings = 0
-	UserNotifSettingsOnlyMentions UserNofifSettings = 1
-	UserNotifSettingsNoMessages   UserNofifSettings = 2
-	UserNotifSettingsInherit      UserNofifSettings = 3
+	UserNotifSettingsAllMessages  UserNotifSettings = 0
+	UserNotifSettingsOnlyMentions UserNotifSettings = 1
+	UserNotifSettingsNoMessages   UserNotifSettings = 2
+	UserNotifSettingsInherit      UserNotifSettings = 3
 )

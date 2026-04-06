@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+//go:generate stringer -type=ChannelType,ChannelPermOverwriteType -output=model_channel_string.go
+
+
 type Channel struct {
 	ID               ID                     `json:"id"`
 	GuildID          ID                     `json:"guild_id"`

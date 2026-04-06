@@ -31,10 +31,19 @@ var defaultUserAgent = func() string {
 }()
 
 var defaultAPIURL = func() *url.URL {
-	url, err := url.Parse("https://api.fluxer.app/")
+	result, err := url.Parse("https://api.fluxer.app/")
 	if err != nil {
 		panic(err)
 	}
 
-	return url
+	return result
+}()
+
+var defaultGatewayURL = func() *url.URL {
+	result, err := url.Parse("wss://gateway.fluxer.app")
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }()

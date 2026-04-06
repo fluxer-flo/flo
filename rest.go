@@ -18,9 +18,9 @@ import (
 
 // REST is used to make REST requests to the Fluxer API, respecting rate limits and updating cache.
 type REST struct {
-	// Auth specifies the authentication header to use. For most endpoints, it is required.
+	// Auth specifies the Authorization header to use. For most endpoints, it is required.
 	Auth string
-	// UserAgent overrides the used User Agent.
+	// UserAgent overrides the used user agent. By default it is generated from the library version.
 	UserAgent string
 	// Cache specifies the caching target. If nil is specified, nothing is cached.
 	Cache *Cache

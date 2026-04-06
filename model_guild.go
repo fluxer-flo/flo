@@ -2,6 +2,8 @@ package flo
 
 import "time"
 
+//go:generate stringer -type=GuildSplashCardAlignment,GuildVerifLevel,GuildMFALevel,GuildNSFWLevel,GuildExplicitContentFilter -output=model_guild_string.go
+
 type Guild struct {
 	ID                    ID                         `json:"id"`
 	Name                  string                     `json:"name"`

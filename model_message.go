@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+//go:generate stringer -type=MessageType,MessageReferenceType -output=model_message_string.go
+
 type Message struct {
 	ID               ID                `json:"id"`
 	ChannelID        ID                `json:"channel_id"`
