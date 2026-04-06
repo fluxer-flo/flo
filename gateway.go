@@ -2,10 +2,12 @@ package flo
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -32,9 +34,8 @@ type Gateway struct {
 
 	PacketReceived Signal[GatewayPacket]
 
-	connected bool
-	outbound  chan<- GatewayPacket
-	stateMu   sync.Mutex
+	sesh   session
+	seshMu sync.Mutex
 }
 
 var ErrGatewayAlreadyConnected = errors.New("already connected")
@@ -55,12 +56,19 @@ func (g *Gateway) Connect(ctx context.Context) error {
 	query.Add("v", "1")
 	url.RawQuery = query.Encode()
 
-	finished, err := g.beginSession(ctx, dialer, url)
+	g.seshMu.Lock()
+	if g.sesh.active {
+		g.seshMu.Unlock()
+		return ErrGatewayAlreadyConnected
+	}
+
+	sesh, err := beginSession(ctx, g, dialer, url)
+	g.seshMu.Unlock()
 	if err != nil {
 		return err
 	}
 
-	return <-finished
+	return <-sesh.finished
 }
 
 type GatewayOpcode uint
@@ -86,45 +94,51 @@ type GatewayPacket struct {
 	Event       *string         `json:"t"`
 }
 
-func (g *Gateway) beginSession(ctx context.Context, dialer *websocket.Dialer, url url.URL) (<-chan error, error) {
-	g.stateMu.Lock()
-	defer func() {
-		g.connected = true
-		g.stateMu.Unlock()
-	}()
+type session struct {
+	active   bool
+	conn     *websocket.Conn
+	inbound  chan GatewayPacket
+	outbound chan GatewayPacket
+	readErr  chan error
+	writeErr chan error
+	finished chan error
 
-	if g.connected {
-		return nil, ErrGatewayAlreadyConnected
-	}
-
-	ws, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create websocket connection: %w", err)
-	}
-
-	inbound := make(chan GatewayPacket)
-	outbound := make(chan GatewayPacket, 1024)
-	g.outbound = outbound
-
-	readErr := make(chan error, 1)
-	writeErr := make(chan error, 1)
-
-	finished := make(chan error, 1)
-
-	go g.sessionReadLoop(ws, inbound, readErr)
-	go g.sessionWriteLoop(ws, outbound, writeErr)
-	go func() {
-		finished <- g.sessionControlLoop(inbound, readErr, writeErr)
-	}()
-
-	return finished, nil
+	lastSeq          *uint
+	heartbeat        <-chan time.Time
+	pendingHeartRate time.Duration
+	heartbeatACK     bool
 }
 
-func (g *Gateway) sessionReadLoop(ws *websocket.Conn, packets chan<- GatewayPacket, readErr chan<- error) {
+func beginSession(ctx context.Context, gateway *Gateway, dialer *websocket.Dialer, url url.URL) (session, error) {
+	conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
+	if err != nil {
+		return session{}, fmt.Errorf("failed to create websocket connection: %w", err)
+	}
+
+	sesh := session{
+		active:   true,
+		conn:     conn,
+		inbound:  make(chan GatewayPacket),
+		outbound: make(chan GatewayPacket, 1024),
+		readErr:  make(chan error),
+		writeErr: make(chan error),
+		finished: make(chan error),
+	}
+
+	go sesh.read()
+	go sesh.write()
+	go func() {
+		sesh.finished <- sesh.control(gateway)
+	}()
+
+	return sesh, nil
+}
+
+func (s *session) read() {
 	for {
-		msgType, reader, err := ws.NextReader()
+		msgType, reader, err := s.conn.NextReader()
 		if err != nil {
-			readErr <- err
+			s.readErr <- err
 			return
 		}
 
@@ -140,16 +154,16 @@ func (g *Gateway) sessionReadLoop(ws *websocket.Conn, packets chan<- GatewayPack
 			continue
 		}
 
-		packets <- packet
+		s.inbound <- packet
 	}
 }
 
-func (g *Gateway) sessionWriteLoop(ws *websocket.Conn, packets <-chan GatewayPacket, writeErr chan<- error) {
+func (s *session) write() {
 	for {
-		packet := <-packets
-		writer, err := ws.NextWriter(websocket.TextMessage)
+		packet := <-s.outbound
+		writer, err := s.conn.NextWriter(websocket.TextMessage)
 		if err != nil {
-			writeErr <- err
+			s.writeErr <- err
 			return
 		}
 
@@ -160,10 +174,32 @@ func (g *Gateway) sessionWriteLoop(ws *websocket.Conn, packets <-chan GatewayPac
 
 		err = writer.Close()
 		if err != nil {
-			writeErr <- err
+			s.writeErr <- err
 			return
 		}
 	}
+}
+
+func (s *session) control(gateway *Gateway) error {
+	for {
+		select {
+		case err := <-s.writeErr:
+			return err
+		case err := <-s.readErr:
+			return err
+		case packet := <-s.inbound:
+			err := s.handlePacket(gateway, packet)
+			if err != nil {
+				return err
+			}
+		case <-s.heartbeat:
+			err := s.sendHeartbeat()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 }
 
 type gatewayIdentifyPayload struct {
@@ -175,75 +211,105 @@ type gatewayIdentifyPayload struct {
 	} `json:"properties"`
 }
 
-func (g *Gateway) sessionControlLoop(inbound <-chan GatewayPacket, readErr <-chan error, writeErr <-chan error) error {
-	var heartbeat <-chan time.Time
-	var lastSeq *uint
+func (s *session) handlePacket(gateway *Gateway, packet GatewayPacket) error {
+	err := gateway.PacketReceived.emit(packet)
+	if err != nil {
+		slog.Warn("error in PacketReceived handler", slog.Any("err", err))
+	}
 
-	sendHeartbeat := func() error {
-		data, err := json.Marshal(lastSeq)
-		if err != nil {
-			return fmt.Errorf("failed to marshal heartbeat data: %w", err)
+	if packet.SequenceNum != nil {
+		var expectedSeq uint = 1
+		if s.lastSeq != nil {
+			expectedSeq = *s.lastSeq + 1
 		}
 
-		g.outbound <- GatewayPacket{
-			Opcode: GatewayOpHeartbeat,
+		if *packet.SequenceNum != expectedSeq {
+			if s.lastSeq != nil {
+				slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", *s.lastSeq, *packet.SequenceNum))
+			} else {
+				slog.Warn(fmt.Sprintf("initial sequence number is not %d: %d", expectedSeq, *packet.SequenceNum))
+			}
+		}
+
+		s.lastSeq = packet.SequenceNum
+	}
+
+	switch packet.Opcode {
+	case GatewayOpHello:
+		var helloData struct {
+			HeartbeatInterval int64 `json:"heartbeat_interval"`
+		}
+		err := json.Unmarshal(packet.Data, &helloData)
+		if err != nil {
+			return fmt.Errorf("failed to decode hello packet data: %w", err)
+		}
+
+		if helloData.HeartbeatInterval <= 0 {
+			return fmt.Errorf("heartbeat interval too short")
+		}
+
+		s.pendingHeartRate = time.Duration(helloData.HeartbeatInterval) * time.Millisecond
+
+		// apply jitter
+		initialWait, err := rand.Int(rand.Reader, big.NewInt(helloData.HeartbeatInterval+1))
+		if err != nil {
+			panic(fmt.Errorf("rand.Int failed: %w", err))
+		}
+
+		s.heartbeat = time.After(time.Duration(initialWait.Int64()) * time.Millisecond)
+
+		payload := gatewayIdentifyPayload{
+			Token: gateway.Auth,
+		}
+		payload.Properties.OS = runtime.GOOS
+		payload.Properties.Browser = defaultUserAgent
+		payload.Properties.Device = defaultUserAgent
+
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal identify packet data: %w", err)
+		}
+
+		fmt.Println(string(data))
+
+		s.outbound <- GatewayPacket{
+			Opcode: GatewayOpIdentify,
 			Data:   data,
 		}
-		return nil
-	}
-
-	for {
-		select {
-		case err := <-writeErr:
-			return err
-		case err := <-readErr:
-			return err
-		case packet := <-inbound:
-			err := g.PacketReceived.emit(packet)
-			if err != nil {
-				slog.Warn("error in PacketReceived handler", slog.Any("err", err))
-			}
-
-
-			if packet.Opcode == GatewayOpHello {
-				var helloData struct {
-					HeartbeatInterval int64 `json:"heartbeat_interval"`
-				}
-				err := json.Unmarshal(packet.Data, &helloData)
-				if err != nil {
-					return fmt.Errorf("failed to decode hello packet data: %w", err)
-				}
-
-				heartbeat = time.Tick(time.Millisecond * time.Duration(helloData.HeartbeatInterval))
-
-				payload := gatewayIdentifyPayload{
-					Token: g.Auth,
-				}
-				payload.Properties.OS = runtime.GOOS
-				payload.Properties.Browser = defaultUserAgent
-				payload.Properties.Device = defaultUserAgent
-
-				data, err := json.Marshal(payload)
-				if err != nil {
-					return fmt.Errorf("failed to marshal identify packet data: %w", err)
-				}
-
-				g.outbound <- GatewayPacket{
-					Opcode: GatewayOpIdentify,
-					Data:   data,
-				}
-			} else if packet.Opcode == GatewayOpHeartbeat {
-				err := sendHeartbeat()
-				if err != nil {
-					return err
-				}
-			}
-		case <-heartbeat:
-			err := sendHeartbeat()
-			if err != nil {
-				return err
-			}
+	case GatewayOpHeartbeat:
+		if !s.heartbeatACK {
+			return fmt.Errorf("heartbeat not acknowledged (RIP)")
 		}
+
+		if s.pendingHeartRate != 0 {
+			s.pendingHeartRate = 0
+			s.heartbeat = time.Tick(s.pendingHeartRate)
+		}
+
+		err := s.sendHeartbeat()
+		if err != nil {
+			return err
+		}
+	case GatewayOpHeartbeatACK:
+		s.heartbeatACK = true
+	default:
+		slog.Warn("don't know how to handle " + packet.Opcode.String())
 	}
 
+	return nil
+}
+
+func (s *session) sendHeartbeat() error {
+	s.heartbeatACK = false
+
+	data, err := json.Marshal(s.lastSeq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal heartbeat data: %w", err)
+	}
+
+	s.outbound <- GatewayPacket{
+		Opcode: GatewayOpHeartbeat,
+		Data:   data,
+	}
+	return nil
 }
