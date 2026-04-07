@@ -21,7 +21,7 @@ var idEpoch = func() time.Time {
 }()
 
 // NewID creates a new dummy ID with the timestamp provided.
-// Two IDs created this way will be identical.
+// Two IDs created with the same timestamp will be identical.
 func NewID(timestamp time.Time) ID {
 	return ID((timestamp.Sub(idEpoch).Milliseconds()) << 22)
 }

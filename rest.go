@@ -20,10 +20,10 @@ import (
 type REST struct {
 	// Auth specifies the Authorization header to use. For most endpoints, it is required.
 	Auth string
-	// UserAgent overrides the used user agent. By default it is generated from the library version.
-	UserAgent string
 	// Cache specifies the caching target. If nil is specified, nothing is cached.
 	Cache *Cache
+	// UserAgent overrides the used user agent. By default it is generated from the library version.
+	UserAgent string
 	// Client allows configuring the underlying HTTP client.
 	Client http.Client
 	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.

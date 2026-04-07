@@ -19,29 +19,68 @@ import (
 
 //go:generate stringer -type=GatewayOpcode -output=gateway_string.go
 
-// Gateway manages Fluxer gateway connections, and provides a high level interface.
-// Currently, since Fluxer does not support sharding this will only use one connection.
+// Gateway manages [Shard]s, and provides a higher level interface.
+// Fluxer does not yet support sharding, but should do upon the release of v2.
+// The current implementation was tested with Discord.
 type Gateway struct {
 	// Auth specifies the token to send when connecting.
 	Auth string
-	// ConnURL specifies the initial URL for establishing a connection.
-	ConnURL *url.URL
 	// Cache specifies the caching target. If nil is specified, nothing is cached.
 	Cache *Cache
+	// ConnURL specifies the initial URL for establishing a connection.
+	ConnURL *url.URL
 	// Dialer specifies options for connecting to the WebSocket server (from Gorilla WebSocket).
 	// It nil is specified, websocket.DefaultDialer is used.
 	Dialer *websocket.Dialer
 
+	// FirstShard is the first and lowest shard ID to connect to.
+	FirstShard uint
+	// LastShard is the last and highest shard ID to connect to.
+	LastShard uint
+	// TotalShards is the total amount of shards that the bot will indicate it will use.
+	// If left unset it will be determined from LastShard + 1.
+	TotalShards uint
+
 	PacketReceived Signal[GatewayPacket]
 
-	sesh   session
-	seshMu sync.Mutex
+	shards          []*Shard
+	currFirstShard  uint
+	currLastShard   uint
+	currTotalShards uint
+	stateMu         sync.RWMutex
 }
 
 var ErrGatewayAlreadyConnected = errors.New("already connected")
 
-// Connect establishes a connection to the gateway and blocks until the connection has finished.
-func (g *Gateway) Connect(ctx context.Context) error {
+func (g *Gateway) initShards() error {
+	if g.LastShard < g.FirstShard {
+		return fmt.Errorf("LastShard (%d) < FirstShard (%d)", g.LastShard, g.FirstShard)
+	}
+
+	g.shards = make([]*Shard, g.LastShard-g.FirstShard+1)
+	for i := uint(0); i <= g.LastShard-g.FirstShard; i++ {
+		g.shards[i] = &Shard{
+			ID:    g.FirstShard + i,
+			ready: make(chan struct{}, 1),
+			end:   make(chan error, 1),
+		}
+	}
+
+	// NOTE: this is to avoid strange behaviour with the original values being modified
+	g.currFirstShard = g.FirstShard
+	g.currLastShard = g.LastShard
+
+	if g.TotalShards == 0 {
+		g.currTotalShards = g.LastShard + 1
+	} else {
+		g.currTotalShards = g.TotalShards
+	}
+
+	return nil
+}
+
+// Connect establishes connections to the gateway and blocks until they are all finished.
+func (g *Gateway) Connect() error {
 	dialer := g.Dialer
 	if dialer == nil {
 		dialer = websocket.DefaultDialer
@@ -53,22 +92,64 @@ func (g *Gateway) Connect(ctx context.Context) error {
 	}
 
 	query := url.Query()
-	query.Add("v", "1")
+	if !query.Has("v") {
+		query.Add("v", "1")
+	}
 	url.RawQuery = query.Encode()
 
-	g.seshMu.Lock()
-	if g.sesh.active {
-		g.seshMu.Unlock()
+	g.stateMu.Lock()
+	if g.shards != nil {
+		g.stateMu.Unlock()
 		return ErrGatewayAlreadyConnected
 	}
 
-	sesh, err := beginSession(ctx, g, dialer, url)
-	g.seshMu.Unlock()
+	err := g.initShards()
 	if err != nil {
+		g.stateMu.Unlock()
 		return err
 	}
 
-	return <-sesh.finished
+	for _, shard := range g.shards {
+		go func() {
+			shard.run(context.Background(), g, dialer, url)
+		}()
+	}
+	g.stateMu.Unlock()
+
+	g.stateMu.RLock()
+	defer g.stateMu.RUnlock()
+
+	for _, shard := range g.shards {
+		fmt.Println("waiting on " + fmt.Sprint(shard.ID))
+		select {
+		case <-shard.ready:
+			continue
+		case err := <-shard.end:
+			return fmt.Errorf("shard #%d ended before ready: %w", shard.ID, err)
+		}
+	}
+
+	return nil
+}
+
+func (g *Gateway) Shard(id uint) (*Shard, bool) {
+	g.stateMu.RLock()
+	defer g.stateMu.RUnlock()
+
+	if id < g.currFirstShard || id > g.currLastShard {
+		return nil, false
+	}
+
+	return g.shards[id-g.FirstShard], true
+}
+
+func (g *Gateway) ShardForGuild(guildID ID) (*Shard, bool) {
+	g.stateMu.RLock()
+	defer g.stateMu.RUnlock()
+
+	// NOTE: thanks to the modulo operator it will always be in range of uint
+	shardID := uint(guildID >> 22 % ID(g.currTotalShards))
+	return g.Shard(uint(shardID))
 }
 
 type GatewayOpcode uint
@@ -94,14 +175,20 @@ type GatewayPacket struct {
 	Event       *string         `json:"t"`
 }
 
-type session struct {
-	active   bool
+type Shard struct {
+	ID uint
+
+	PacketReceived Signal[GatewayPacket]
+
+	// signals to the gateway, set only once by the gateway
+	ready chan struct{}
+	end   chan error
+
 	conn     *websocket.Conn
 	inbound  chan GatewayPacket
 	outbound chan GatewayPacket
 	readErr  chan error
 	writeErr chan error
-	finished chan error
 
 	lastSeq          *uint
 	heartbeat        <-chan time.Time
@@ -109,32 +196,40 @@ type session struct {
 	heartbeatACK     bool
 }
 
-func beginSession(ctx context.Context, gateway *Gateway, dialer *websocket.Dialer, url url.URL) (session, error) {
-	conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
-	if err != nil {
-		return session{}, fmt.Errorf("failed to create websocket connection: %w", err)
+func (s *Shard) run(ctx context.Context, gateway *Gateway, dialer *websocket.Dialer, url url.URL) {
+	var sleepTime time.Duration
+	for {
+		time.Sleep(sleepTime)
+		sleepTime = time.Second
+
+		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
+		if err != nil {
+			slog.Warn(
+				"failed to establish websocket connection; retrying in "+sleepTime.String(),
+				slog.Int("shard", int(s.ID)),
+				slog.Any("err", err),
+			)
+			continue
+		}
+
+		s.conn = conn
+		s.inbound = make(chan GatewayPacket)
+		s.outbound = make(chan GatewayPacket, 1024)
+		s.readErr = make(chan error)
+		s.writeErr = make(chan error)
+
+		go s.read()
+		go s.write()
+
+		err = s.listen(gateway)
+		slog.Warn(
+			"error with webhook connection; retrying in "+sleepTime.String(),
+			slog.Int("shard", int(s.ID)),
+		)
 	}
-
-	sesh := session{
-		active:   true,
-		conn:     conn,
-		inbound:  make(chan GatewayPacket),
-		outbound: make(chan GatewayPacket, 1024),
-		readErr:  make(chan error),
-		writeErr: make(chan error),
-		finished: make(chan error),
-	}
-
-	go sesh.read()
-	go sesh.write()
-	go func() {
-		sesh.finished <- sesh.control(gateway)
-	}()
-
-	return sesh, nil
 }
 
-func (s *session) read() {
+func (s *Shard) read() {
 	for {
 		msgType, reader, err := s.conn.NextReader()
 		if err != nil {
@@ -158,7 +253,7 @@ func (s *session) read() {
 	}
 }
 
-func (s *session) write() {
+func (s *Shard) write() {
 	for {
 		packet := <-s.outbound
 		writer, err := s.conn.NextWriter(websocket.TextMessage)
@@ -180,7 +275,7 @@ func (s *session) write() {
 	}
 }
 
-func (s *session) control(gateway *Gateway) error {
+func (s *Shard) listen(gateway *Gateway) error {
 	for {
 		select {
 		case err := <-s.writeErr:
@@ -203,7 +298,8 @@ func (s *session) control(gateway *Gateway) error {
 }
 
 type gatewayIdentifyPayload struct {
-	Token      string `json:"token"`
+	Token      string  `json:"token"`
+	Shard      [2]uint `json:"shard,omitempty"`
 	Properties struct {
 		OS      string `json:"os"`
 		Browser string `json:"browser"`
@@ -211,8 +307,8 @@ type gatewayIdentifyPayload struct {
 	} `json:"properties"`
 }
 
-func (s *session) handlePacket(gateway *Gateway, packet GatewayPacket) error {
-	err := gateway.PacketReceived.emit(packet)
+func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
+	err := errors.Join(s.PacketReceived.emit(packet), gateway.PacketReceived.emit(packet))
 	if err != nil {
 		slog.Warn("error in PacketReceived handler", slog.Any("err", err))
 	}
@@ -260,7 +356,9 @@ func (s *session) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 
 		payload := gatewayIdentifyPayload{
 			Token: gateway.Auth,
+			Shard: [2]uint{s.ID, gateway.currTotalShards},
 		}
+
 		payload.Properties.OS = runtime.GOOS
 		payload.Properties.Browser = defaultUserAgent
 		payload.Properties.Device = defaultUserAgent
@@ -292,6 +390,8 @@ func (s *session) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 		}
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
+	case GatewayOpDispatch:
+		s.handleEvent(packet)
 	default:
 		slog.Warn("don't know how to handle " + packet.Opcode.String())
 	}
@@ -299,7 +399,22 @@ func (s *session) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 	return nil
 }
 
-func (s *session) sendHeartbeat() error {
+func (s *Shard) handleEvent(packet GatewayPacket) error {
+	if packet.Event == nil {
+		return errors.New("Dispatch packet does not contain event name")
+	}
+
+	event := *packet.Event
+	switch event {
+	case "READY":
+		s.ready <- struct{}{}
+		s.ready = nil
+	}
+
+	return nil
+}
+
+func (s *Shard) sendHeartbeat() error {
 	s.heartbeatACK = false
 
 	data, err := json.Marshal(s.lastSeq)
