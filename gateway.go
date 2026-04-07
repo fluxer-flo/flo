@@ -407,7 +407,9 @@ func (s *Shard) handleEvent(packet GatewayPacket) error {
 	event := *packet.Event
 	switch event {
 	case "READY":
-		s.ready <- struct{}{}
+		if s.ready != nil {
+			s.ready <- struct{}{}
+		}
 		s.ready = nil
 	}
 
