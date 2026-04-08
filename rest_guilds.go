@@ -27,9 +27,13 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 
 	if r.Cache != nil {
 		r.Cache.Guilds.Update(result.ID, func(guild *Guild) {
-			guild.updateREST(&result)
+			guild.updateProperties(&result)
 			result = *guild
 		})
+	}
+
+	if result.Channels == nil {
+		result.Channels = new(Collection[Channel])
 	}
 
 	return result, nil

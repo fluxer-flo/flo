@@ -42,10 +42,30 @@ type Gateway struct {
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
 
+	// Emitted when a packet on any of the shards is received.
 	PacketReceived Signal[ShardPacketEvent]
+	// Emitted when a guild is deleted or the user has left it.
+	GuildDelete Signal[GuildRemoveEvent]
+	// Emitted when a guild is unavailable.
+	GuildUnavailable Signal[GuildRemoveEvent]
+	// Emitted when the user has joined a guild.
+	GuildCreate Signal[GuildAddEvent]
+	// Emitted when a guild is no longer unavailable.
+	GuildAvailable Signal[GuildAddEvent]
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
+}
+
+type GuildRemoveEvent struct {
+	Shard  *Shard
+	ID     ID
+	Cached *Guild
+}
+
+type GuildAddEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
 }
 
 var defaultGatewayURL = func() *url.URL {
@@ -511,7 +531,10 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
 	case GatewayOpDispatch:
-		s.handleDispatch(packet)
+		err := s.handleDispatch(packet)
+		if err != nil {
+			return fmt.Errorf("error handling Dispatch packet: %w", err)
+		}
 	default:
 		slog.Warn("don't know how to handle " + packet.Opcode.String())
 	}
@@ -524,15 +547,75 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		return errors.New("Dispatch packet does not contain event name")
 	}
 
+	cache := s.gateway.Cache
+
 	switch *packet.Event {
 	case "READY":
 		event := ShardReadyEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to unmarshal READY data: %w", err)
 		}
 
 		s.Ready.emit(event)
+	case "GUILD_DELETE":
+		var raw struct {
+			ID          ID   `json:"id"`
+			Unavailable bool `json:"unavailable"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_DELETE data: %w", err)
+		}
+
+		event := GuildRemoveEvent{
+			Shard: s,
+			ID:    raw.ID,
+		}
+
+		if cache != nil {
+			if guild, ok := cache.Guilds.Delete(raw.ID); ok {
+				event.Cached = guild
+			}
+
+			if raw.Unavailable {
+				s.gateway.Cache.UnavailableGuilds.Set(raw.ID, struct{}{})
+			}
+		}
+
+		if raw.Unavailable {
+			s.gateway.GuildUnavailable.emit(event)
+		} else {
+			s.gateway.GuildDelete.emit(event)
+		}
+	case "GUILD_CREATE":
+		var raw struct {
+			Properties Guild     `json:"properties"`
+			Channels   []Channel `json:"channels"`
+		}
+
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_CREATE data: %w", err)
+		}
+
+		event := GuildAddEvent{Shard: s}
+		if cache != nil {
+			event.Guild = cache.MakeGuild(raw.Properties.ID)
+		}
+		if event.Guild.Channels == nil {
+			event.Guild.Channels = new(Collection[Channel])
+		}
+		event.Guild.updateProperties(&raw.Properties)
+
+		if cache != nil {
+			if _, ok := cache.UnavailableGuilds.Delete(raw.Properties.ID); ok {
+				s.gateway.GuildAvailable.emit(event)
+				break
+			}
+		}
+
+		s.gateway.GuildCreate.emit(event)
 	}
 
 	return nil

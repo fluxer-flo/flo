@@ -41,7 +41,7 @@ func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
-func (g *Guild) updateREST(guild *Guild) {
+func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
 	*g = *guild
 	g.Channels = oldChannels
@@ -135,4 +135,4 @@ const (
 	GuildOperationMemberListUpdates GuildOperations = 1 << 6
 )
 
-type Perms uint
+type Perms string

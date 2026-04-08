@@ -313,21 +313,21 @@ func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 }
 
 // Delete removes the item with the specified ID from the collection.
-func (c *Collection[T]) Delete(id ID) bool {
+func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	if c.limit == 0 {
-		return false
+		return nil, false
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.lookup == nil {
-		return false
+		return nil, false
 	}
 
 	entry, ok := c.lookup[id]
 	if !ok {
-		return false
+		return nil, false
 	}
 
 	if entry.lru != nil {
@@ -335,5 +335,6 @@ func (c *Collection[T]) Delete(id ID) bool {
 	}
 
 	delete(c.lookup, id)
-	return true
+	entry.lru = nil // avoid leaking
+	return &entry.val, true
 }
