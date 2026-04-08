@@ -1,3 +1,4 @@
+// Package flo provides a high-level way to use the Fluxer API.
 package flo
 
 import "runtime/debug"
