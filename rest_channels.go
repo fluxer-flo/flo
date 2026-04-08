@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// SendMessageOpts specifies a message to send.
-type SendMessageOpts struct {
+// CreateMessageOpts specifies a message to send.
+type CreateMessageOpts struct {
 	Content string      `json:"content,omitempty"`
 	Embeds  []EmbedOpts `json:"embeds,omitempty"`
 }
@@ -53,7 +53,7 @@ func rateLimitCreateMessage(channelID ID) RateLimitConfig {
 	}
 }
 
-func (r *REST) SendMessage(ctx context.Context, channelID ID, opts SendMessageOpts) (Message, error) {
+func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessageOpts) (Message, error) {
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "POST",
@@ -74,12 +74,6 @@ func (r *REST) SendMessage(ctx context.Context, channelID ID, opts SendMessageOp
 	}
 
 	return resp, nil
-}
-
-func (r *REST) SendMessageContent(ctx context.Context, channelID ID, content string) (Message, error) {
-	return r.SendMessage(ctx, channelID, SendMessageOpts{
-		Content: content,
-	})
 }
 
 func rateLimitDeleteMessage(channelID ID) RateLimitConfig {
