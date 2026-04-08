@@ -134,3 +134,5 @@ const (
 	GuildOperationReactions         GuildOperations = 1 << 5
 	GuildOperationMemberListUpdates GuildOperations = 1 << 6
 )
+
+type Perms uint
