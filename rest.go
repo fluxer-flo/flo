@@ -29,20 +29,23 @@ type REST struct {
 	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.
 	BaseURL *url.URL
 
-	buckets   map[RateLimitConfig]rateLimitBucket
+	buckets   map[RESTRateLimitConfig]rateLimitBucket
 	bucketsMu sync.Mutex
 }
 
-type RESTFormField struct {
-	FieldName string
-	FileName  string
-	Content   io.ReadCloser
-}
+var defaultAPIURL = func() *url.URL {
+	result, err := url.Parse("https://api.fluxer.app/")
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}()
 
 type RESTRequest struct {
 	Method    string
 	Path      string
-	RateLimit RateLimitConfig
+	RateLimit RESTRateLimitConfig
 
 	// Payload specifies a JSON body.
 	// If used in combination with Form, it will be added as payload_json.
@@ -54,106 +57,20 @@ type RESTRequest struct {
 	AuditLogReason string
 }
 
-// RateLimitConfig specifies options to be used to rate limit the request together with other requests using the same config..
+type RESTFormField struct {
+	FieldName string
+	FileName  string
+	Content   io.ReadCloser
+}
+
+// RESTRateLimitConfig specifies options to be used to rate limit the request together with other requests using the same config..
 // If bucket is not provided, the request will not be rate limited.
 // Appropriate rate limit configs can easily be found within [the Fluxer backend] at the time of writing.
 // [the Fluxer backend]: https://github.com/fluxerapp/fluxer/tree/refactor/packages/api/src/rate_limit_configs
-type RateLimitConfig struct {
+type RESTRateLimitConfig struct {
 	Bucket string
 	Limit  int
 	Window time.Duration
-}
-
-type rateLimitBucket struct {
-	filled    int
-	leakStart time.Time
-}
-
-// acquireBucketSlot acquires a slot in the rate limit bucket, pausing if necessary.
-// An error is returned if the passed context is cancelled.
-func (r *REST) acquireBucketSlot(ctx context.Context, conf RateLimitConfig) error {
-	r.bucketsMu.Lock()
-
-	if r.buckets == nil {
-		r.buckets = map[RateLimitConfig]rateLimitBucket{}
-	}
-
-	bucket := r.buckets[conf]
-
-	rn := time.Now()
-
-	leakRate := conf.Window / time.Duration(conf.Limit)
-	effectiveFilled := bucket.filled - int(rn.Sub(bucket.leakStart)/leakRate)
-
-	if effectiveFilled <= 0 {
-		effectiveFilled = 0
-		bucket.leakStart = time.Now()
-	}
-
-	bucket.filled++
-	effectiveFilled++
-
-	r.buckets[conf] = bucket
-	r.bucketsMu.Unlock()
-
-	if effectiveFilled > conf.Limit {
-		refillDelay := time.Duration(effectiveFilled-conf.Limit)*leakRate + rn.Sub(bucket.leakStart)%leakRate
-
-		select {
-		case <-time.After(refillDelay):
-			break
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return nil
-}
-
-func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
-	var buf bytes.Buffer
-	var form multipart.Writer
-
-	for _, field := range req.Form {
-		var writer io.Writer
-		var err error
-		if field.FileName != "" {
-			writer, err = form.CreateFormFile(field.FieldName, field.FileName)
-		} else {
-			writer, err = form.CreateFormField(field.FieldName)
-		}
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to create form field '%s': %w", field.FieldName, err)
-		}
-
-		_, err = io.Copy(writer, field.Content)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to copy form field content for '%s': %w", field.FieldName, err)
-		}
-	}
-
-	if req.Payload != nil {
-		writer, err := form.CreateFormField("payload_json")
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to create form field for payload JSON: %w", err)
-		}
-
-		err = json.NewEncoder(writer).Encode(req.Payload)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to encode payload JSON for form: %w", err)
-		}
-	}
-
-	err := form.Close()
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to end form: %w", err)
-	}
-
-	contentType := mime.FormatMediaType("multipart/form-data", map[string]string{
-		"boundary": form.Boundary(),
-	})
-
-	return io.NopCloser(&buf), contentType, nil
 }
 
 // Request sends a Request to a Fluxer endpoint. If the returned error is nil, the response body should be closed.
@@ -296,6 +213,98 @@ func (r *REST) RequestNoContent(ctx context.Context, req RESTRequest) error {
 	}
 
 	return nil
+}
+
+type rateLimitBucket struct {
+	filled    int
+	leakStart time.Time
+}
+
+// acquireBucketSlot acquires a slot in the rate limit bucket, pausing if necessary.
+// An error is returned if the passed context is cancelled.
+func (r *REST) acquireBucketSlot(ctx context.Context, conf RESTRateLimitConfig) error {
+	r.bucketsMu.Lock()
+
+	if r.buckets == nil {
+		r.buckets = map[RESTRateLimitConfig]rateLimitBucket{}
+	}
+
+	bucket := r.buckets[conf]
+
+	rn := time.Now()
+
+	leakRate := conf.Window / time.Duration(conf.Limit)
+	effectiveFilled := bucket.filled - int(rn.Sub(bucket.leakStart)/leakRate)
+
+	if effectiveFilled <= 0 {
+		effectiveFilled = 0
+		bucket.leakStart = time.Now()
+	}
+
+	bucket.filled++
+	effectiveFilled++
+
+	r.buckets[conf] = bucket
+	r.bucketsMu.Unlock()
+
+	if effectiveFilled > conf.Limit {
+		refillDelay := time.Duration(effectiveFilled-conf.Limit)*leakRate + rn.Sub(bucket.leakStart)%leakRate
+
+		select {
+		case <-time.After(refillDelay):
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
+}
+
+func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
+	var buf bytes.Buffer
+	var form multipart.Writer
+
+	for _, field := range req.Form {
+		var writer io.Writer
+		var err error
+		if field.FileName != "" {
+			writer, err = form.CreateFormFile(field.FieldName, field.FileName)
+		} else {
+			writer, err = form.CreateFormField(field.FieldName)
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to create form field '%s': %w", field.FieldName, err)
+		}
+
+		_, err = io.Copy(writer, field.Content)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to copy form field content for '%s': %w", field.FieldName, err)
+		}
+	}
+
+	if req.Payload != nil {
+		writer, err := form.CreateFormField("payload_json")
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to create form field for payload JSON: %w", err)
+		}
+
+		err = json.NewEncoder(writer).Encode(req.Payload)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to encode payload JSON for form: %w", err)
+		}
+	}
+
+	err := form.Close()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to end form: %w", err)
+	}
+
+	contentType := mime.FormatMediaType("multipart/form-data", map[string]string{
+		"boundary": form.Boundary(),
+	})
+
+	return io.NopCloser(&buf), contentType, nil
 }
 
 // RESTAPIError represents an API error from Fluxer in the expected format.

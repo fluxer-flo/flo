@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func rateLimitReadUser(userID ID) RateLimitConfig {
-	return RateLimitConfig{
+func rateLimitReadUser(userID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("users:read:%d", userID),
 		Limit:  100,
 		Window: 10 * time.Second,

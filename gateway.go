@@ -42,7 +42,7 @@ type Gateway struct {
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
 
-	PacketReceived Signal[GatewayPacket]
+	PacketReceived Signal[ShardPacketEvent]
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
@@ -51,6 +51,15 @@ type Gateway struct {
 	lastShard   uint
 	totalShards uint
 }
+
+var defaultGatewayURL = func() *url.URL {
+	result, err := url.Parse("wss://gateway.fluxer.app")
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}()
 
 func (g *Gateway) initShards() {
 	if g.shards != nil {
@@ -166,14 +175,6 @@ const (
 	GatewayOpHello               GatewayOpcode = 10
 	GatewayOpHeartbeatACK        GatewayOpcode = 11
 )
-
-type GatewayPacket struct {
-	Opcode      GatewayOpcode   `json:"op"`
-	Data        json.RawMessage `json:"d"`
-	SequenceNum *uint           `json:"s"`
-	Event       *string         `json:"t"`
-}
-
 type shardState uint
 
 const (
@@ -183,7 +184,7 @@ const (
 )
 
 type Shard struct {
-	PacketReceived Signal[GatewayPacket]
+	PacketReceived Signal[ShardPacketEvent]
 
 	gateway *Gateway
 	id      uint
@@ -203,8 +204,24 @@ type Shard struct {
 	heartbeatACK     bool
 }
 
-func (c *Shard) ID() uint {
-	return c.id
+type ShardPacketEvent struct {
+	Shard *Shard
+	GatewayPacket
+}
+
+type GatewayPacket struct {
+	Opcode      GatewayOpcode   `json:"op"`
+	Data        json.RawMessage `json:"d"`
+	SequenceNum *uint           `json:"s"`
+	Event       *string         `json:"t"`
+}
+
+func (s *Shard) Gateway() *Gateway {
+	return s.gateway
+}
+
+func (s *Shard) ID() uint {
+	return s.id
 }
 
 var (
@@ -289,6 +306,16 @@ func (s *Shard) run() {
 			slog.Any("shard", s.ID),
 			slog.Any("err", err),
 		)
+
+		err = s.conn.Close()
+		if err != nil {
+			slog.Warn(
+				"error closing webhook connection",
+				slog.Any("shard", s.ID),
+				slog.Any("err", err),
+			)
+		}
+
 	}
 }
 
@@ -347,7 +374,7 @@ func (s *Shard) controlLoop() error {
 		case err := <-s.readErr:
 			return err
 		case packet := <-s.inbound:
-			err := s.handlePacket(s.gateway, packet)
+			err := s.handlePacket(packet)
 			if err != nil {
 				return err
 			}
@@ -370,8 +397,13 @@ type gatewayIdentifyPayload struct {
 	} `json:"properties"`
 }
 
-func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
-	err := errors.Join(s.PacketReceived.emit(packet), gateway.PacketReceived.emit(packet))
+func (s *Shard) handlePacket(packet GatewayPacket) error {
+	event := ShardPacketEvent{
+		Shard:         s,
+		GatewayPacket: packet,
+	}
+
+	err := errors.Join(s.PacketReceived.emit(event), s.gateway.PacketReceived.emit(event))
 	if err != nil {
 		slog.Warn("error in PacketReceived handler", slog.Any("err", err))
 	}
@@ -418,8 +450,8 @@ func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 		s.heartbeat = time.After(time.Duration(initialWait.Int64()) * time.Millisecond)
 
 		payload := gatewayIdentifyPayload{
-			Token: gateway.Auth,
-			Shard: [2]uint{s.id, gateway.totalShards},
+			Token: s.gateway.Auth,
+			Shard: [2]uint{s.id, s.gateway.totalShards},
 		}
 
 		payload.Properties.OS = runtime.GOOS
@@ -454,7 +486,7 @@ func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
 	case GatewayOpDispatch:
-		s.handleEvent(packet)
+		s.handleDispatch(packet)
 	default:
 		slog.Warn("don't know how to handle " + packet.Opcode.String())
 	}
@@ -462,7 +494,7 @@ func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 	return nil
 }
 
-func (s *Shard) handleEvent(packet GatewayPacket) error {
+func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	if packet.Event == nil {
 		return errors.New("Dispatch packet does not contain event name")
 	}

@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func rateLimitReadGuild(guildID ID) RateLimitConfig {
-	return RateLimitConfig{
+func rateLimitReadGuild(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("guild:read:%d", guildID),
 		Limit:  100,
 		Window: 10 * time.Second,

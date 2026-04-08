@@ -45,8 +45,8 @@ type EmbedFooterOpts struct {
 	IconURL string `json:"icon_url,omitempty"`
 }
 
-func rateLimitCreateMessage(channelID ID) RateLimitConfig {
-	return RateLimitConfig{
+func rateLimitCreateMessage(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("channel:message:create:%d", channelID),
 		Limit:  20,
 		Window: 10 * time.Second,
@@ -76,8 +76,8 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 	return resp, nil
 }
 
-func rateLimitDeleteMessage(channelID ID) RateLimitConfig {
-	return RateLimitConfig{
+func rateLimitDeleteMessage(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("channel:message:delete:%d", channelID),
 		Limit:  20,
 		Window: 10 * time.Second,
