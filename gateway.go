@@ -33,8 +33,10 @@ type Gateway struct {
 	Dialer *websocket.Dialer
 
 	// FirstShard is the first and lowest shard ID to connect to.
+	// If it is greater than LastShard trying to access any shard will panic.
 	FirstShard uint
 	// LastShard is the final and highest shard ID to connect to.
+	// If it is less than FirstShard trying to access any shard will panic.
 	LastShard uint
 	// TotalShards is the total amount of shards that the bot will indicate it will use.
 	// If left unset it will be determined from the highest shard ID + 1.
@@ -53,6 +55,10 @@ type Gateway struct {
 func (g *Gateway) initShards() {
 	if g.shards != nil {
 		return
+	}
+
+	if g.FirstShard > g.LastShard {
+		panic(fmt.Errorf("FirstShard (%d) > LastShard(%d)", g.FirstShard, g.LastShard))
 	}
 
 	g.shards = make([]*Shard, g.LastShard-g.FirstShard+1)
