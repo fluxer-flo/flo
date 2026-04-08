@@ -501,8 +501,6 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 			return fmt.Errorf("failed to marshal identify packet data: %w", err)
 		}
 
-		fmt.Println(string(data))
-
 		s.outbound <- GatewayPacket{
 			Opcode: GatewayOpIdentify,
 			Data:   data,
