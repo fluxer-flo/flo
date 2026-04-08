@@ -19,9 +19,8 @@ import (
 
 //go:generate stringer -type=GatewayOpcode -output=gateway_string.go
 
-// Gateway manages [Shard]s, and provides a higher level interface.
-// Fluxer does not yet support sharding, but should do upon the release of v2.
-// The current implementation was tested with Discord.
+// Gateway manages one or more [Shard]s and provides a high-level interface for listening to events.
+// Sharding is supported, but at the time of writing Fluxer does not support it yet - it has instead been tested with Discord.
 type Gateway struct {
 	// Auth specifies the token to send when connecting.
 	Auth string
@@ -30,126 +29,120 @@ type Gateway struct {
 	// ConnURL specifies the initial URL for establishing a connection.
 	ConnURL *url.URL
 	// Dialer specifies options for connecting to the WebSocket server (from Gorilla WebSocket).
-	// It nil is specified, websocket.DefaultDialer is used.
+	// If nil, websocket.DefaultDialer is used.
 	Dialer *websocket.Dialer
 
 	// FirstShard is the first and lowest shard ID to connect to.
 	FirstShard uint
-	// LastShard is the last and highest shard ID to connect to.
+	// LastShard is the final and highest shard ID to connect to.
 	LastShard uint
 	// TotalShards is the total amount of shards that the bot will indicate it will use.
-	// If left unset it will be determined from LastShard + 1.
+	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
 
 	PacketReceived Signal[GatewayPacket]
 
-	shards          []*Shard
-	currFirstShard  uint
-	currLastShard   uint
-	currTotalShards uint
-	stateMu         sync.RWMutex
+	shardsMu sync.RWMutex
+	shards   []*Shard
+	// backed up fields in case they change
+	firstShard  uint
+	lastShard   uint
+	totalShards uint
 }
 
-var ErrGatewayAlreadyConnected = errors.New("already connected")
-
-func (g *Gateway) initShards() error {
-	if g.LastShard < g.FirstShard {
-		return fmt.Errorf("LastShard (%d) < FirstShard (%d)", g.LastShard, g.FirstShard)
+func (g *Gateway) initShards() {
+	if g.shards != nil {
+		return
 	}
 
 	g.shards = make([]*Shard, g.LastShard-g.FirstShard+1)
-	for i := uint(0); i <= g.LastShard-g.FirstShard; i++ {
-		g.shards[i] = &Shard{
-			ID:    g.FirstShard + i,
-			ready: make(chan struct{}, 1),
-			end:   make(chan error, 1),
+	for id := uint(0); id <= g.LastShard-g.FirstShard; id++ {
+		g.shards[id] = &Shard{
+			gateway: g,
+			id:      id,
 		}
 	}
 
-	// NOTE: this is to avoid strange behaviour with the original values being modified
-	g.currFirstShard = g.FirstShard
-	g.currLastShard = g.LastShard
+	g.firstShard = g.FirstShard
+	g.lastShard = g.LastShard
 
 	if g.TotalShards == 0 {
-		g.currTotalShards = g.LastShard + 1
+		g.totalShards = g.lastShard + 1
 	} else {
-		g.currTotalShards = g.TotalShards
+		g.totalShards = g.TotalShards
 	}
-
-	return nil
 }
 
-// Connect establishes connections to the gateway and blocks until they are all finished.
-func (g *Gateway) Connect() error {
-	dialer := g.Dialer
-	if dialer == nil {
-		dialer = websocket.DefaultDialer
-	}
-
-	url := *defaultGatewayURL
-	if g.ConnURL != nil {
-		url = *g.ConnURL
-	}
-
-	query := url.Query()
-	if !query.Has("v") {
-		query.Add("v", "1")
-	}
-	url.RawQuery = query.Encode()
-
-	g.stateMu.Lock()
-	if g.shards != nil {
-		g.stateMu.Unlock()
-		return ErrGatewayAlreadyConnected
-	}
-
-	err := g.initShards()
-	if err != nil {
-		g.stateMu.Unlock()
-		return err
-	}
-
-	for _, shard := range g.shards {
-		go func() {
-			shard.run(context.Background(), g, dialer, url)
-		}()
-	}
-	g.stateMu.Unlock()
-
-	g.stateMu.RLock()
-	defer g.stateMu.RUnlock()
-
-	for _, shard := range g.shards {
-		fmt.Println("waiting on " + fmt.Sprint(shard.ID))
-		select {
-		case <-shard.ready:
-			continue
-		case err := <-shard.end:
-			return fmt.Errorf("shard #%d ended before ready: %w", shard.ID, err)
-		}
-	}
-
-	return nil
-}
-
+// Shard returns the shard by the specified ID, which may or may not be connected.
+// This will cause the internal list of [Shard]s to be populated (if not already) after which any changes to FirstShard, LastShard or TotalShards will be ignored.
 func (g *Gateway) Shard(id uint) (*Shard, bool) {
-	g.stateMu.RLock()
-	defer g.stateMu.RUnlock()
+	g.shardsMu.RLock()
 
-	if id < g.currFirstShard || id > g.currLastShard {
+	if g.shards == nil {
+		g.shardsMu.RUnlock()
+		g.shardsMu.Lock()
+		defer g.shardsMu.Unlock()
+
+		g.initShards()
+	} else {
+		defer g.shardsMu.RUnlock()
+	}
+
+	if id < g.firstShard || id > g.lastShard {
 		return nil, false
 	}
 
-	return g.shards[id-g.FirstShard], true
+	return g.shards[id-g.firstShard], true
 }
 
-func (g *Gateway) ShardForGuild(guildID ID) (*Shard, bool) {
-	g.stateMu.RLock()
-	defer g.stateMu.RUnlock()
+// Connect connects all shards which are not already connected.
+// This will cause the internal list of [Shard]s to be populated (if not already) after which any changes to FirstShard, LastShard or TotalShards will be ignored.
+// If some of the shards were already connected an error will be returned.
+// You may ignore this if it is not important.
+func (g *Gateway) Connect() error {
+	g.shardsMu.Lock()
+	if g.shards == nil {
+		g.initShards()
+	}
+	g.shardsMu.Unlock()
 
-	// NOTE: thanks to the modulo operator it will always be in range of uint
-	shardID := uint(guildID >> 22 % ID(g.currTotalShards))
-	return g.Shard(uint(shardID))
+	g.shardsMu.RLock()
+	defer g.shardsMu.RUnlock()
+
+	var errs []error
+	for _, shard := range g.shards {
+		err := shard.Connect()
+		if err != nil {
+			errs = append(errs, fmt.Errorf(
+				"failed to connect shard #%d: %w",
+				shard.id,
+				err,
+			))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// Disconnect disconnects all connected shards.
+// If some of the shards were not connected an error will be returned.
+func (g *Gateway) Disconnect(reconnect bool) error {
+	g.shardsMu.RLock()
+	defer g.shardsMu.RUnlock()
+
+	var errs []error
+	for _, shard := range g.shards {
+		err := shard.Disconnect(reconnect)
+		if err != nil {
+			errs = append(errs, fmt.Errorf(
+				"failed to disconnect shard #%d: %w",
+				shard.id,
+				err,
+			))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 type GatewayOpcode uint
@@ -175,38 +168,101 @@ type GatewayPacket struct {
 	Event       *string         `json:"t"`
 }
 
-type Shard struct {
-	ID uint
+type shardState uint
 
+const (
+	shardStateDisconnected shardState = iota
+	shardStateConnected
+	shardStateDisconnecting
+)
+
+type Shard struct {
 	PacketReceived Signal[GatewayPacket]
 
-	// signals to the gateway, set only once by the gateway
-	ready chan struct{}
-	end   chan error
+	gateway *Gateway
+	id      uint
 
-	conn     *websocket.Conn
-	inbound  chan GatewayPacket
-	outbound chan GatewayPacket
-	readErr  chan error
-	writeErr chan error
+	stateMu    sync.Mutex
+	state      shardState
+	disconnect chan bool // bool = whether to reconnect
 
+	conn             *websocket.Conn
+	inbound          chan GatewayPacket
+	outbound         chan GatewayPacket
+	readErr          chan error
+	writeErr         chan error
 	lastSeq          *uint
 	heartbeat        <-chan time.Time
 	pendingHeartRate time.Duration
 	heartbeatACK     bool
 }
 
-func (s *Shard) run(ctx context.Context, gateway *Gateway, dialer *websocket.Dialer, url url.URL) {
+func (c *Shard) ID() uint {
+	return c.id
+}
+
+var (
+	ErrShardAlreadyConnected     = errors.New("shard already connected")
+	ErrShardAlreadyDisconnecting = errors.New("shard already disconnecting")
+	ErrShardAlreadyDisconnected  = errors.New("shard already disconnected")
+)
+
+func (s *Shard) Connect() error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if s.state != shardStateDisconnected {
+		return ErrShardAlreadyConnected
+	}
+
+	s.state = shardStateConnected
+	go s.run()
+	return nil
+}
+
+func (s *Shard) Disconnect(reconnect bool) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	switch s.state {
+	case shardStateDisconnected:
+		return ErrShardAlreadyDisconnected
+	case shardStateDisconnecting:
+		return ErrShardAlreadyDisconnecting
+	}
+
+	s.state = shardStateDisconnecting
+	s.disconnect <- reconnect
+	return nil
+}
+
+func (s *Shard) run() {
 	var sleepTime time.Duration
 	for {
 		time.Sleep(sleepTime)
 		sleepTime = time.Second
 
-		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
+		dialer := s.gateway.Dialer
+		if dialer == nil {
+			dialer = websocket.DefaultDialer
+		}
+
+		url := *defaultGatewayURL
+		if s.gateway.ConnURL != nil {
+			url = *s.gateway.ConnURL
+		}
+
+		query := url.Query()
+		if !query.Has("v") {
+			query.Add("v", "1")
+		}
+		url.RawQuery = query.Encode()
+
+		conn, _, err := dialer.DialContext(context.TODO(), url.String(), http.Header{})
 		if err != nil {
 			slog.Warn(
 				"failed to establish websocket connection; retrying in "+sleepTime.String(),
-				slog.Int("shard", int(s.ID)),
+				slog.Any("shard", s.id),
 				slog.Any("err", err),
 			)
 			continue
@@ -218,18 +274,19 @@ func (s *Shard) run(ctx context.Context, gateway *Gateway, dialer *websocket.Dia
 		s.readErr = make(chan error)
 		s.writeErr = make(chan error)
 
-		go s.read()
-		go s.write()
+		go s.readLoop()
+		go s.writeLoop()
 
-		err = s.listen(gateway)
+		err = s.controlLoop()
 		slog.Warn(
 			"error with webhook connection; retrying in "+sleepTime.String(),
-			slog.Int("shard", int(s.ID)),
+			slog.Any("shard", s.ID),
+			slog.Any("err", err),
 		)
 	}
 }
 
-func (s *Shard) read() {
+func (s *Shard) readLoop() {
 	for {
 		msgType, reader, err := s.conn.NextReader()
 		if err != nil {
@@ -253,7 +310,7 @@ func (s *Shard) read() {
 	}
 }
 
-func (s *Shard) write() {
+func (s *Shard) writeLoop() {
 	for {
 		packet := <-s.outbound
 		writer, err := s.conn.NextWriter(websocket.TextMessage)
@@ -275,7 +332,8 @@ func (s *Shard) write() {
 	}
 }
 
-func (s *Shard) listen(gateway *Gateway) error {
+// controlLoop handles incoming messages and the heartbeat interval.
+func (s *Shard) controlLoop() error {
 	for {
 		select {
 		case err := <-s.writeErr:
@@ -283,7 +341,7 @@ func (s *Shard) listen(gateway *Gateway) error {
 		case err := <-s.readErr:
 			return err
 		case packet := <-s.inbound:
-			err := s.handlePacket(gateway, packet)
+			err := s.handlePacket(s.gateway, packet)
 			if err != nil {
 				return err
 			}
@@ -294,7 +352,6 @@ func (s *Shard) listen(gateway *Gateway) error {
 			}
 		}
 	}
-
 }
 
 type gatewayIdentifyPayload struct {
@@ -356,7 +413,7 @@ func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 
 		payload := gatewayIdentifyPayload{
 			Token: gateway.Auth,
-			Shard: [2]uint{s.ID, gateway.currTotalShards},
+			Shard: [2]uint{s.id, gateway.totalShards},
 		}
 
 		payload.Properties.OS = runtime.GOOS
@@ -402,15 +459,6 @@ func (s *Shard) handlePacket(gateway *Gateway, packet GatewayPacket) error {
 func (s *Shard) handleEvent(packet GatewayPacket) error {
 	if packet.Event == nil {
 		return errors.New("Dispatch packet does not contain event name")
-	}
-
-	event := *packet.Event
-	switch event {
-	case "READY":
-		if s.ready != nil {
-			s.ready <- struct{}{}
-		}
-		s.ready = nil
 	}
 
 	return nil
