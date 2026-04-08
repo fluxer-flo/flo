@@ -175,6 +175,7 @@ const (
 	GatewayOpHello               GatewayOpcode = 10
 	GatewayOpHeartbeatACK        GatewayOpcode = 11
 )
+
 type shardState uint
 
 const (
@@ -259,6 +260,21 @@ func (s *Shard) Disconnect(reconnect bool) error {
 	return nil
 }
 
+func shouldReconnectShard(code int) bool {
+	switch code {
+	case 4004: // authentication failed
+		return false
+	case 4010: // invalid shard
+		return false
+	case 4011: // sharding required
+		return false
+	case 4012: // invalid API version
+		return false
+	default:
+		return true
+	}
+}
+
 func (s *Shard) run() {
 	var sleepTime time.Duration
 	for {
@@ -301,11 +317,26 @@ func (s *Shard) run() {
 		go s.writeLoop()
 
 		err = s.controlLoop()
-		slog.Warn(
-			"error with webhook connection; retrying in "+sleepTime.String(),
-			slog.Any("shard", s.ID),
-			slog.Any("err", err),
-		)
+		reconnect := true
+
+		var closeErr *websocket.CloseError
+		if errors.As(err, &closeErr) {
+			reconnect = shouldReconnectShard(closeErr.Code)
+		}
+
+		if reconnect {
+			slog.Warn(
+				"error with webhook connection; reconnecting in "+sleepTime.String(),
+				slog.Any("shard", s.ID),
+				slog.Any("err", err),
+			)
+		} else {
+			slog.Warn(
+				"unrecoverable error with webhook connection; not reconnecting",
+				slog.Any("shard", s.ID),
+				slog.Any("err", err),
+			)
+		}
 
 		err = s.conn.Close()
 		if err != nil {
@@ -316,7 +347,14 @@ func (s *Shard) run() {
 			)
 		}
 
+		if !reconnect {
+			break
+		}
 	}
+
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.state = shardStateDisconnected
 }
 
 func (s *Shard) readLoop() {
