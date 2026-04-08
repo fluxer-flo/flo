@@ -46,10 +46,6 @@ type Gateway struct {
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
-	// backed up fields in case they change
-	firstShard  uint
-	lastShard   uint
-	totalShards uint
 }
 
 var defaultGatewayURL = func() *url.URL {
@@ -74,23 +70,14 @@ func (g *Gateway) initShards() {
 	for id := uint(0); id <= g.LastShard-g.FirstShard; id++ {
 		g.shards[id] = &Shard{
 			gateway: g,
-			id:      id,
+			id:      g.FirstShard + id,
 		}
-	}
-
-	g.firstShard = g.FirstShard
-	g.lastShard = g.LastShard
-
-	if g.TotalShards == 0 {
-		g.totalShards = g.lastShard + 1
-	} else {
-		g.totalShards = g.TotalShards
 	}
 }
 
-// Shard returns the shard by the specified ID, which may or may not be connected.
-// This will cause the internal list of [Shard]s to be populated (if not already) after which any changes to FirstShard, LastShard or TotalShards will be ignored.
-func (g *Gateway) Shard(id uint) (*Shard, bool) {
+// Shards returns the list of shards which will be connected to.
+// The sharding parameters should not be changed after this is called.
+func (g *Gateway) Shards() []*Shard {
 	g.shardsMu.RLock()
 
 	if g.shards == nil {
@@ -103,15 +90,23 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 		defer g.shardsMu.RUnlock()
 	}
 
-	if id < g.firstShard || id > g.lastShard {
+	return g.shards
+}
+
+// Shard returns the shard by the specified ID, which may or may not be connected.
+// The sharding parameters should not be changed after this is called.
+func (g *Gateway) Shard(id uint) (*Shard, bool) {
+	shards := g.Shards()
+
+	if id < g.FirstShard || id > g.LastShard {
 		return nil, false
 	}
 
-	return g.shards[id-g.firstShard], true
+	return shards[id-g.FirstShard], true
 }
 
 // Connect connects all shards which are not already connected.
-// This will cause the internal list of [Shard]s to be populated (if not already) after which any changes to FirstShard, LastShard or TotalShards will be ignored.
+// The sharding parameters should not be changed after this is called.
 // If some of the shards were already connected an error will be returned.
 // You may ignore this if it is not important.
 func (g *Gateway) Connect() error {
@@ -495,7 +490,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 
 		payload := gatewayIdentifyPayload{
 			Token: s.gateway.Auth,
-			Shard: [2]uint{s.id, s.gateway.totalShards},
+			Shard: [2]uint{s.id, s.gateway.TotalShards},
 		}
 
 		payload.Properties.OS = runtime.GOOS
