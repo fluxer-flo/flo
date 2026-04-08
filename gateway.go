@@ -186,6 +186,7 @@ const (
 
 type Shard struct {
 	PacketReceived Signal[ShardPacketEvent]
+	Ready          Signal[ShardReadyEvent]
 
 	gateway *Gateway
 	id      uint
@@ -206,8 +207,13 @@ type Shard struct {
 }
 
 type ShardPacketEvent struct {
-	Shard *Shard
+	Shard *Shard `json:"-"`
 	GatewayPacket
+}
+
+type ShardReadyEvent struct {
+	Shard *Shard      `json:"-"`
+	User  UserPrivate `json:"user"`
 }
 
 type GatewayPacket struct {
@@ -533,6 +539,17 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	if packet.Event == nil {
 		return errors.New("Dispatch packet does not contain event name")
+	}
+
+	switch *packet.Event {
+	case "READY":
+		event := ShardReadyEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return err
+		}
+
+		s.Ready.emit(event)
 	}
 
 	return nil

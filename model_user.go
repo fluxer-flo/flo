@@ -42,6 +42,18 @@ func (u *User) IsDeleted() bool {
 	return u.Username == "DeletedUser" && u.Discriminator == "0000"
 }
 
+type UserPrivate struct {
+	User
+	IsStaff     bool      `json:"is_staff"`
+	Traits      []string  `json:"traits"`
+	Bio         string    `json:"bio"`
+	AccentColor *ColorInt `json:"accent_color"`
+	Banner      *string   `json:"banner"`
+	BannerColor *ColorInt `json:"banner_color"`
+	MFAEnabled  bool      `json:"mfa_enabled"`
+	NSFWAllowed bool      `json:"nsfw_allowed"`
+}
+
 type UserFlags uint
 
 const (
