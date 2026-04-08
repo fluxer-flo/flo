@@ -1,6 +1,10 @@
 package flo
 
-import "time"
+import (
+	"fmt"
+	"math/big"
+	"time"
+)
 
 //go:generate stringer -type=GuildSplashCardAlignment,GuildVerifLevel,GuildMFALevel,GuildNSFWLevel,GuildExplicitContentFilter -output=model_guild_string.go
 
@@ -32,7 +36,7 @@ type Guild struct {
 	ExplicitContentFilter GuildExplicitContentFilter `json:"explicit_content_filter"`
 	DefaultMessageNotifs  UserNotifSettings          `json:"default_message_notifs"`
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
-	MessageHistoryCutoff  *time.Time                  `json:"message_history_cutoff"`
+	MessageHistoryCutoff  *time.Time                 `json:"message_history_cutoff"`
 
 	Channels *Collection[Channel] `json:"-"`
 }
@@ -168,4 +172,197 @@ func (m *Member) DisplayName() string {
 	}
 }
 
-type Perms string
+// Perms respresents a set of member permissions.
+// The zero value can be used to represent no permissions.
+type Perms struct {
+	val *big.Int
+}
+
+var (
+	PermCreateInstantInvite = NewPermsBit(0)
+	PermKickMembers         = NewPermsBit(1)
+	PermBanMembers          = NewPermsBit(2)
+	PermAdministrator       = NewPermsBit(3)
+	PermManageChannels      = NewPermsBit(4)
+	PermManageGuild         = NewPermsBit(5)
+	PermAddReactions        = NewPermsBit(6)
+	PermViewAuditLog        = NewPermsBit(7)
+	PermPrioritySpeaker     = NewPermsBit(8)
+	PermStream              = NewPermsBit(9)
+	PermViewChannel         = NewPermsBit(10)
+	PermSendMessages        = NewPermsBit(11)
+	PermSendTTSMessages     = NewPermsBit(12)
+	PermManageMessages      = NewPermsBit(13)
+	PermEmbedLinks          = NewPermsBit(14)
+	PermAttachFiles         = NewPermsBit(15)
+	PermReadMessageHistory  = NewPermsBit(16)
+	PermMentionEveryone     = NewPermsBit(17)
+	PermUseExternalEmojis   = NewPermsBit(18)
+	PermConnect             = NewPermsBit(20)
+	PermSpeak               = NewPermsBit(21)
+	PermMuteMembers         = NewPermsBit(22)
+	PermDeafenMembers       = NewPermsBit(23)
+	PermMoveMembers         = NewPermsBit(24)
+	PermUseVAD              = NewPermsBit(25)
+	PermChangeNickname      = NewPermsBit(26)
+	PermManageNicknames     = NewPermsBit(27)
+	PermManageRoles         = NewPermsBit(28)
+	PermManageWebhooks      = NewPermsBit(29)
+	PermManageExpressions   = NewPermsBit(30)
+	PermUseExternalStickers = NewPermsBit(37)
+	PermModerateMembers     = NewPermsBit(40)
+	PermCreateExpressions   = NewPermsBit(43)
+	PermPinMembers          = NewPermsBit(51)
+	PermBypassSlowmode      = NewPermsBit(52)
+	PermUpdateRTCRegion     = NewPermsBit(53)
+)
+
+// NewPerms creates permissions as a combination of all provided permissions.
+func NewPerms(p ...Perms) Perms {
+	var result Perms
+
+	for _, perms := range p {
+		result = result.Union(perms)
+	}
+
+	return result
+}
+
+func NewPermsBit(bit uint) Perms {
+	result := big.NewInt(1)
+	result.Lsh(result, bit)
+
+	return Perms{result}
+}
+
+// PermsFromBigInt creates permissions with the underlying [big.Int] representation.
+func PermsFromBigInt(val *big.Int) Perms {
+	if val == nil {
+		return Perms{}
+	}
+
+	var result Perms
+	result.val = big.NewInt(0)
+	result.val.Set(val)
+
+	return result
+}
+
+// BigInt returns the underlying [big.Int] representation of the permissions.
+func (p Perms) BigInt() *big.Int {
+	result := big.NewInt(0)
+
+	if p.val != nil {
+		result.Set(p.val)
+	}
+
+	return result
+}
+
+// Intersection returns the common permissions between p and p2.
+func (p Perms) Intersection(p2 Perms) Perms {
+	if p.val == nil || p2.val == nil {
+		return Perms{}
+	}
+
+	result := big.NewInt(0)
+	result.And(p.val, p2.val)
+
+	return Perms{result}
+}
+
+// Union returns a combination of permissions between p and p2.
+func (p Perms) Union(p2 Perms) Perms {
+	if p.val == nil {
+		return p2
+	}
+	if p2.val == nil {
+		return p
+	}
+
+	result := big.NewInt(0)
+	result.Or(p.val, p2.val)
+
+	return Perms{result}
+}
+
+// Difference returns the set of permissions which are in p but not in p2.
+func (p Perms) Difference(p2 Perms) Perms {
+	if p.val == nil {
+		return Perms{}
+	}
+	if p2.val == nil {
+		return p
+	}
+
+	mask := big.NewInt(0)
+	mask.Not(p2.val)
+
+	result := big.NewInt(0)
+	result.And(result, mask)
+
+	return Perms{result}
+}
+
+// Equal returns true if p and p2 represent the same set of permissions.
+func (p Perms) Equal(p2 Perms) bool {
+	if p.val == nil {
+		return p2.val == nil || p2.val.BitLen() == 0
+	}
+	if p2.val == nil {
+		return p.val == nil || p.val.BitLen() == 0
+	}
+
+	return p.val.Cmp(p2.val) == 0
+}
+
+// Has returns true if p contains all the perms in p2.
+func (p Perms) Has(p2 ...Perms) bool {
+	other := NewPerms(p2...)
+	return p.Intersection(other).Equal(other)
+}
+
+// Set adds all of the permissions on p2 to p.
+func (p *Perms) Set(p2 ...Perms) {
+	*p = p.Union(NewPerms(p2...))
+}
+
+// Clear removes all of the permissions on p2 from p.
+// If p2 is empty, p is fully cleared instead.
+func (p *Perms) Clear(p2 ...Perms) {
+	if len(p2) == 0 {
+		p.val = nil
+		return
+	}
+
+	*p = p.Difference(NewPerms(p2...))
+}
+
+func (p Perms) String() string {
+	if p.val == nil {
+		return "0"
+	} else {
+		return p.val.String()
+	}
+}
+
+func (p Perms) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, `"%v"`, p), nil
+}
+
+func (p *Perms) UnmarshalJSON(data []byte) error {
+	if len(data) < 2 || data[0] != '"' || data[len(data)-1] != '"' {
+		return fmt.Errorf("expected JSON string")
+	}
+
+	unquoted := data[1 : len(data)-1]
+
+	result := big.NewInt(0)
+	err := result.UnmarshalText(unquoted)
+	if err != nil {
+		return err
+	}
+
+	p.val = result
+	return nil
+}
