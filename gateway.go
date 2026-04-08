@@ -110,17 +110,8 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 // If some of the shards were already connected an error will be returned.
 // You may ignore this if it is not important.
 func (g *Gateway) Connect() error {
-	g.shardsMu.Lock()
-	if g.shards == nil {
-		g.initShards()
-	}
-	g.shardsMu.Unlock()
-
-	g.shardsMu.RLock()
-	defer g.shardsMu.RUnlock()
-
 	var errs []error
-	for _, shard := range g.shards {
+	for _, shard := range g.Shards() {
 		err := shard.Connect()
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
@@ -137,11 +128,8 @@ func (g *Gateway) Connect() error {
 // Disconnect disconnects all connected shards.
 // If some of the shards were not connected an error will be returned.
 func (g *Gateway) Disconnect(reconnect bool) error {
-	g.shardsMu.RLock()
-	defer g.shardsMu.RUnlock()
-
 	var errs []error
-	for _, shard := range g.shards {
+	for _, shard := range g.Shards() {
 		err := shard.Disconnect(reconnect)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
