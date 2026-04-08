@@ -33,7 +33,8 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	}
 
 	if result.Channels == nil {
-		result.Channels = new(Collection[Channel])
+		channels := NewCollectionUnlimited[Channel]()
+		result.Channels = &channels
 	}
 
 	return result, nil

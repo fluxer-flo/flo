@@ -604,11 +604,19 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			event.Guild = cache.MakeGuild(raw.Properties.ID)
 		}
 		if event.Guild.Channels == nil {
-			event.Guild.Channels = new(Collection[Channel])
+			channels := NewCollectionUnlimited[Channel]()
+			event.Guild.Channels = &channels
 		}
 		event.Guild.updateProperties(&raw.Properties)
 
+		event.Guild.Channels.Clear()
+		for _, channel := range raw.Channels {
+			event.Guild.Channels.Set(channel.ID, channel)
+		}
+
 		if cache != nil {
+			cache.Guilds.Set(event.Guild.ID, event.Guild)
+
 			if _, ok := cache.UnavailableGuilds.Delete(raw.Properties.ID); ok {
 				s.gateway.GuildAvailable.emit(event)
 				break

@@ -338,3 +338,12 @@ func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	entry.lru = nil // avoid leaking
 	return &entry.val, true
 }
+
+func (c *Collection[T]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.lookup = nil
+	c.lru = nil
+	c.lruTail = nil
+}
