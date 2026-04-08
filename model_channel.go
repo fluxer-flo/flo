@@ -117,6 +117,14 @@ func (m *Message) Delete(rest *REST, ctx context.Context) error {
 	return rest.DeleteMessage(ctx, m.ChannelID, m.ID)
 }
 
+func (m *Message) updateCache(cache *Cache) {
+	cache.Users.Set(m.Author.ID, m.Author)
+
+	for _, user := range m.Mentions {
+		cache.Users.Set(user.ID, user)
+	}
+}
+
 type MessageType uint
 
 const (

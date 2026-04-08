@@ -66,11 +66,7 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 	}
 
 	if r.Cache != nil {
-		r.Cache.Users.Set(resp.Author.ID, resp.Author)
-
-		for _, user := range resp.Mentions {
-			r.Cache.Users.Set(user.ID, user)
-		}
+		resp.updateCache(r.Cache)
 	}
 
 	return resp, nil

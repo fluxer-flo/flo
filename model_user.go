@@ -25,7 +25,7 @@ func (u *User) Tag() string {
 	return u.Username + "#" + u.Discriminator
 }
 
-// DisplayName returns the rendered name in chat outside of any guilds.
+// DisplayName returns the user's rendered name in chat outside of any guilds.
 func (u *User) DisplayName() string {
 	if u.GlobalName != nil {
 		return *u.GlobalName

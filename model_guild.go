@@ -32,7 +32,7 @@ type Guild struct {
 	ExplicitContentFilter GuildExplicitContentFilter `json:"explicit_content_filter"`
 	DefaultMessageNotifs  UserNotifSettings          `json:"default_message_notifs"`
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
-	MessageHistoryCutoff  time.Time                  `json:"message_history_cutoff"`
+	MessageHistoryCutoff  *time.Time                  `json:"message_history_cutoff"`
 
 	Channels *Collection[Channel] `json:"-"`
 }
@@ -134,5 +134,38 @@ const (
 	GuildOperationReactions         GuildOperations = 1 << 5
 	GuildOperationMemberListUpdates GuildOperations = 1 << 6
 )
+
+type Member struct {
+	User              User       `json:"user"`
+	Nick              *string    `json:"nick"`
+	Avatar            *string    `json:"avatar"`
+	Banner            *string    `json:"banner"`
+	AccentColor       *ColorInt  `json:"accent_color"`
+	Roles             []ID       `json:"roles"`
+	JoinedAt          time.Time  `json:"joined_at"`
+	Mute              bool       `json:"mute"`
+	Deaf              bool       `json:"deaf"`
+	CommDisabledUntil *time.Time `json:"communication_disabled_until"`
+}
+
+func (m *Member) CreatedAt() time.Time {
+	return m.CreatedAt()
+}
+
+// Tag returns a string of Username#Discriminator.
+func (m *Member) Tag() string {
+	return m.Tag()
+}
+
+// DisplayName returns the member's rendered name in chat.
+func (m *Member) DisplayName() string {
+	if m.Nick != nil {
+		return *m.Nick
+	} else if m.User.GlobalName != nil {
+		return *m.User.GlobalName
+	} else {
+		return m.User.Username
+	}
+}
 
 type Perms string

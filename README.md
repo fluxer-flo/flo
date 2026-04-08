@@ -27,7 +27,13 @@ gateway.Ready.Once(func(r flo.ReadyEvent) {
 })
 gateway.MessageCreate.On(func(m flo.Message) {
     if m.Content == "!ping" {
-        rest.SendMessageContent(context.TODO(), m.ChannelID, "pong!")
+        rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
+            Content: "pong!"
+        })
+    } else if m.Content == "!pong" {
+        rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
+            Content: "ping!"
+        })
     }
 })
 

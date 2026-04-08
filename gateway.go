@@ -52,6 +52,8 @@ type Gateway struct {
 	GuildCreate Signal[GuildAddEvent]
 	// Emitted when a guild is no longer unavailable.
 	GuildAvailable Signal[GuildAddEvent]
+	// Emitted when a user sends a message.
+	MessageCreate Signal[MessageCreateEvent]
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
@@ -66,6 +68,13 @@ type GuildRemoveEvent struct {
 type GuildAddEvent struct {
 	Shard *Shard `json:"-"`
 	Guild
+}
+
+type MessageCreateEvent struct {
+	Shard   *Shard `json:"-"`
+	Member  Member `json:"member"`
+	GuildID ID     `json:"guild_id"`
+	Message
 }
 
 var defaultGatewayURL = func() *url.URL {
@@ -624,6 +633,20 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildCreate.emit(event)
+	case "MESSAGE_CREATE":
+		event := MessageCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_CREATE data: %w", err)
+		}
+
+		event.Member.User = event.Author
+
+		if cache != nil {
+			event.updateCache(cache)
+		}
+
+		s.gateway.MessageCreate.emit(event)
 	}
 
 	return nil
