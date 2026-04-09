@@ -747,7 +747,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal MESSAGE_CREATE data: %w", err)
 		}
 
-		event.Member.User = event.Message.Author
+		if event.Member != nil {
+			event.Member.User = event.Message.Author
+		}
 
 		if cache != nil {
 			event.Message.updateCache(cache)
