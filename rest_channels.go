@@ -8,8 +8,9 @@ import (
 
 // CreateMessageOpts specifies a message to send.
 type CreateMessageOpts struct {
-	Content string      `json:"content,omitempty"`
-	Embeds  []EmbedOpts `json:"embeds,omitempty"`
+	Content         string           `json:"content,omitempty"`
+	Embeds          []EmbedOpts      `json:"embeds,omitempty"`
+	AllowedMentions *AllowedMentions `json:"allowed_mentions,omitempty"`
 }
 
 // EmbedOpts specifies a rich embed when sending or editing a message.
@@ -45,6 +46,21 @@ type EmbedFooterOpts struct {
 	IconURL string `json:"icon_url,omitempty"`
 }
 
+type AllowedMentions struct {
+	Parse       []AllowedMentionsParse `json:"parse,omitzero"`
+	Users       []ID                   `json:"users,omitzero"`
+	Roles       []ID                   `json:"roles,omitzero"`
+	RepliedUser *bool                  `json:"replied_user,omitempty"`
+}
+
+type AllowedMentionsParse string
+
+const (
+	AllowedMentionsParseUsers    AllowedMentionsParse = "users"
+	AllowedMentionsParseRoles    AllowedMentionsParse = "roles"
+	AllowedMentionsParseEveryone AllowedMentionsParse = "everyone"
+)
+
 func rateLimitCreateMessage(channelID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("channel:message:create:%d", channelID),
@@ -54,6 +70,10 @@ func rateLimitCreateMessage(channelID ID) RESTRateLimitConfig {
 }
 
 func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessageOpts) (Message, error) {
+	if opts.AllowedMentions == nil {
+		opts.AllowedMentions = r.DefaultAllowedMentions
+	}
+
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "POST",

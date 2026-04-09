@@ -29,6 +29,9 @@ type REST struct {
 	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.
 	BaseURL *url.URL
 
+	// DefaultAllowedMentions specifies the default allowed mentions if nothing is specified when creating or editing a message.
+	DefaultAllowedMentions *AllowedMentions
+
 	buckets   map[RESTRateLimitConfig]rateLimitBucket
 	bucketsMu sync.Mutex
 }
