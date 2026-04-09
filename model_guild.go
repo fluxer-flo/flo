@@ -39,16 +39,47 @@ type Guild struct {
 	MessageHistoryCutoff  *time.Time                 `json:"message_history_cutoff"`
 
 	Channels *Collection[Channel] `json:"-"`
+	Roles    *Collection[Role]    `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
+func newGuildForCache(id ID, cache *Cache) Guild {
+	var result Guild
+
+	if cache == nil {
+		channels := NewCollectionUnlimited[Channel]()
+		result.Channels = &channels
+
+		roles := NewCollectionUnlimited[Role]()
+		result.Roles = &roles
+	} else {
+		if cache.MakeGuild != nil {
+			result = cache.MakeGuild(id)
+		}
+
+		if result.Channels == nil {
+			result.Channels = new(Collection[Channel])
+		}
+
+		if result.Roles == nil {
+			result.Roles = new(Collection[Role])
+		}
+	}
+
+	return result
+}
+
 func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
+	oldRoles := g.Roles
+
 	*g = *guild
+
 	g.Channels = oldChannels
+	g.Roles = oldRoles
 }
 
 type GuildSplashCardAlignment uint
@@ -139,6 +170,22 @@ const (
 	GuildOperationMemberListUpdates GuildOperations = 1 << 6
 )
 
+type Role struct {
+	ID            ID       `json:"id"`
+	Name          string   `json:"name"`
+	Color         ColorInt `json:"color"`
+	Position      int      `json:"position"`
+	HoistPosition *int     `json:"hoist_position"`
+	Perms         Perms    `json:"permissions"`
+	Hoist         bool     `json:"hoist"`
+	Mentionable   bool     `json:"mentionable"`
+	UnicodeEmoji  *string  `json:"unicode_emoji"`
+}
+
+func (r *Role) Mention() string {
+	return fmt.Sprintf("<@&%d>", r.ID)
+}
+
 type Member struct {
 	User              User       `json:"user"`
 	Nick              *string    `json:"nick"`
@@ -154,6 +201,10 @@ type Member struct {
 
 func (m *Member) CreatedAt() time.Time {
 	return m.CreatedAt()
+}
+
+func (m *Member) Mention() string {
+	return m.User.Mention()
 }
 
 // Tag returns a string of Username#Discriminator.

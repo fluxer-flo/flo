@@ -19,8 +19,10 @@ func NewCacheDefault() Cache {
 		UnavailableGuilds: NewCollectionUnlimited[struct{}](),
 		MakeGuild: func(id ID) Guild {
 			channels := NewCollectionUnlimited[Channel]()
+			roles := NewCollectionUnlimited[Role]()
 			return Guild{
 				Channels: &channels,
+				Roles:    &roles,
 			}
 		},
 		Users: NewCollectionUnlimited[User](),

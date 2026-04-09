@@ -1,6 +1,9 @@
 package flo
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 //go:generate stringer -type=UserNotifSettings -output=model_user_string.go
 
@@ -18,6 +21,10 @@ type User struct {
 
 func (u *User) CreatedAt() time.Time {
 	return u.ID.CreatedAt()
+}
+
+func (u *User) Mention() string {
+	return fmt.Sprintf("<@%d>", u.ID)
 }
 
 // Tag returns a string of Username#Discriminator.

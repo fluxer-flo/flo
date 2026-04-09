@@ -2,6 +2,7 @@ package flo
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -32,6 +33,10 @@ type Channel struct {
 
 func (c *Channel) CreatedAt() time.Time {
 	return c.ID.CreatedAt()
+}
+
+func (c *Channel) Mention() string {
+	return fmt.Sprintf("<#%d>", c.ID)
 }
 
 func (c *Channel) IsTextable() bool {

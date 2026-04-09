@@ -601,26 +601,27 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		var raw struct {
 			Properties Guild     `json:"properties"`
 			Channels   []Channel `json:"channels"`
+			Roles      []Role    `json:"roles"`
 		}
-
 		err := json.Unmarshal(packet.Data, &raw)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal GUILD_CREATE data: %w", err)
 		}
 
-		event := GuildAddEvent{Shard: s}
-		if cache != nil {
-			event.Guild = cache.MakeGuild(raw.Properties.ID)
-		}
-		if event.Guild.Channels == nil {
-			channels := NewCollectionUnlimited[Channel]()
-			event.Guild.Channels = &channels
+		event := GuildAddEvent{
+			Shard: s,
+			Guild: newGuildForCache(raw.Properties.ID, cache),
 		}
 		event.Guild.updateProperties(&raw.Properties)
 
 		event.Guild.Channels.Clear()
 		for _, channel := range raw.Channels {
 			event.Guild.Channels.Set(channel.ID, channel)
+		}
+
+		event.Guild.Roles.Clear()
+		for _, role := range raw.Roles {
+			event.Guild.Roles.Set(role.ID, role)
 		}
 
 		if cache != nil {
