@@ -154,7 +154,7 @@ type Message struct {
 	// MessageReference identifies the forwarded or replied to message.
 	MessageReference MessageReference `json:"message_reference"`
 	// Call specifies the call the message represents if the type is [MessageTypeCall].
-	Call  *MessageCall `json:"call"`
+	Call *MessageCall `json:"call"`
 }
 
 func (m *Message) CreatedAt() time.Time {
@@ -170,7 +170,9 @@ func (m *Message) Delete(rest *REST, ctx context.Context) error {
 }
 
 func (m *Message) updateCache(cache *Cache) {
-	cache.Users.Set(m.Author.ID, m.Author)
+	if m.WebhookID == nil {
+		cache.Users.Set(m.Author.ID, m.Author)
+	}
 
 	for _, user := range m.Mentions {
 		cache.Users.Set(user.ID, user)
