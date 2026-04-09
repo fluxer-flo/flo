@@ -475,6 +475,15 @@ func (s *Shard) controlLoop() error {
 				return err
 			}
 		case <-s.heartbeat:
+			if !s.heartbeatACK {
+				return fmt.Errorf("heartbeat not acknowledged (RIP)")
+			}
+
+			if s.pendingHeartRate != 0 {
+				s.pendingHeartRate = 0
+				s.heartbeat = time.Tick(s.pendingHeartRate)
+			}
+
 			err := s.sendHeartbeat()
 			if err != nil {
 				return err
@@ -564,15 +573,6 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 			Data:   data,
 		}
 	case GatewayOpHeartbeat:
-		if !s.heartbeatACK {
-			return fmt.Errorf("heartbeat not acknowledged (RIP)")
-		}
-
-		if s.pendingHeartRate != 0 {
-			s.pendingHeartRate = 0
-			s.heartbeat = time.Tick(s.pendingHeartRate)
-		}
-
 		err := s.sendHeartbeat()
 		if err != nil {
 			return err
