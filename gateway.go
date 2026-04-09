@@ -250,7 +250,7 @@ type Shard struct {
 	outbound         chan GatewayPacket
 	readErr          chan error
 	writeErr         chan error
-	lastSeq          *uint
+	lastSeq          uint
 	heartbeat        <-chan time.Time
 	pendingHeartRate time.Duration
 	heartbeatACK     bool
@@ -368,6 +368,10 @@ func (s *Shard) run() {
 		s.outbound = make(chan GatewayPacket, 1024)
 		s.readErr = make(chan error)
 		s.writeErr = make(chan error)
+		s.lastSeq = 0
+		s.heartbeat = nil
+		s.pendingHeartRate = 0
+		s.heartbeatACK = true
 
 		go s.readLoop()
 		go s.writeLoop()
@@ -478,14 +482,11 @@ func (s *Shard) controlLoop() error {
 			}
 
 			if s.pendingHeartRate != 0 {
-				s.pendingHeartRate = 0
 				s.heartbeat = time.Tick(s.pendingHeartRate)
+				s.pendingHeartRate = 0
 			}
 
-			err := s.sendHeartbeat()
-			if err != nil {
-				return err
-			}
+			s.sendHeartbeat()
 		}
 	}
 }
@@ -512,20 +513,11 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 	}
 
 	if packet.SequenceNum != nil {
-		var expectedSeq uint = 1
-		if s.lastSeq != nil {
-			expectedSeq = *s.lastSeq + 1
+		if *packet.SequenceNum != s.lastSeq+1 {
+			slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", s.lastSeq, *packet.SequenceNum))
 		}
 
-		if *packet.SequenceNum != expectedSeq {
-			if s.lastSeq != nil {
-				slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", *s.lastSeq, *packet.SequenceNum))
-			} else {
-				slog.Warn(fmt.Sprintf("initial sequence number is not %d: %d", expectedSeq, *packet.SequenceNum))
-			}
-		}
-
-		s.lastSeq = packet.SequenceNum
+		s.lastSeq = *packet.SequenceNum
 	}
 
 	switch packet.Opcode {
@@ -571,10 +563,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 			Data:   data,
 		}
 	case GatewayOpHeartbeat:
-		err := s.sendHeartbeat()
-		if err != nil {
-			return err
-		}
+		s.sendHeartbeat()
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
 	case GatewayOpDispatch:
@@ -772,17 +761,19 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	return nil
 }
 
-func (s *Shard) sendHeartbeat() error {
-	s.heartbeatACK = false
-
-	data, err := json.Marshal(s.lastSeq)
-	if err != nil {
-		return fmt.Errorf("failed to marshal heartbeat data: %w", err)
+func (s *Shard) marshalSeq() []byte {
+	if s.lastSeq == 0 {
+		return []byte("null")
+	} else {
+		return fmt.Append(nil, s.lastSeq)
 	}
 
+}
+
+func (s *Shard) sendHeartbeat() {
+	s.heartbeatACK = false
 	s.outbound <- GatewayPacket{
 		Opcode: GatewayOpHeartbeat,
-		Data:   data,
+		Data:   s.marshalSeq(),
 	}
-	return nil
 }
