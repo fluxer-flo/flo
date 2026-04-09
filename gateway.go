@@ -60,8 +60,6 @@ type Gateway struct {
 	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
 	// ChannelDelete is emitted when a channel is deleted.
 	ChannelDelete Signal[ChannelDeleteEvent]
-
-	// GuildChannelUpdate is emitted when a channel is updated in a guild.
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
