@@ -152,7 +152,9 @@ type Message struct {
 	// Reactions contains the reactions on the message.
 	Reactions []MessageReaction `json:"reactions"`
 	// MessageReference identifies the forwarded or replied to message.
-	MessageReference MessageReference `json:"message_reference"`
+	MessageReference *MessageReference `json:"message_reference"`
+	// ReferencedMessage is the message that is being replied to.
+	ReferencedMessage *Message `json:"referenced_message"` // TODO: also add MessageSnaphots
 	// Call specifies the call the message represents if the type is [MessageTypeCall].
 	Call *MessageCall `json:"call"`
 }
@@ -176,6 +178,13 @@ func (m *Message) updateCache(cache *Cache) {
 
 	for _, user := range m.Mentions {
 		cache.Users.Set(user.ID, user)
+	}
+
+	if m.ReferencedMessage != nil {
+		referenced := *m.ReferencedMessage
+		// NOTE: prevent recursion, just in case
+		referenced.ReferencedMessage = nil
+		referenced.updateCache(cache)
 	}
 }
 

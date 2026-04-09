@@ -44,19 +44,35 @@ type Gateway struct {
 
 	// PacketReceived is emitted when a packet on any of the shards is received.
 	PacketReceived Signal[ShardPacketEvent]
-	// GuildDelete is emitted when a guild is deleted or the user has left it.
-	GuildDelete Signal[GuildRemoveEvent]
-	// GuildUnavailable is emitted when a guild is unavailable.
-	GuildUnavailable Signal[GuildRemoveEvent]
 	// GuildCreate is emitted when the user has joined a guild.
 	GuildCreate Signal[GuildAddEvent]
 	// GuildAvailable is emitted when a guild is no longer unavailable.
 	GuildAvailable Signal[GuildAddEvent]
+	// GuildDelete is emitted when a guild is deleted or the user has left it.
+	GuildDelete Signal[GuildRemoveEvent]
+	// GuildUnavailable is emitted when a guild is unavailable.
+	GuildUnavailable Signal[GuildRemoveEvent]
+	// ChannelCreate is emitted when a channel is created or opened for the user.
+	ChannelCreate Signal[ChannelCreateEvent]
+	// ChannelUpdate is emitted when an individual channel is updated.
+	ChannelUpdate Signal[ChannelUpdateEvent]
+	// ChannelUpdateBulk is emitted when multiple guild channel updates are reported at once.
+	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
+	// ChannelDelete is emitted when a channel is deleted.
+	ChannelDelete Signal[ChannelDeleteEvent]
+
+	// GuildChannelUpdate is emitted when a channel is updated in a guild.
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
+}
+
+// GuildAddEvent represents a guild becoming available or being joined.
+type GuildAddEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
 }
 
 // GuildRemoveEvent represents a guild becoming unavailable or being left/deleted.
@@ -67,10 +83,25 @@ type GuildRemoveEvent struct {
 	Cached *Guild
 }
 
-// GuildAddEvent represents a guild becoming available or being joined.
-type GuildAddEvent struct {
+type ChannelCreateEvent struct {
 	Shard *Shard `json:"-"`
-	Guild
+	Channel
+}
+
+type ChannelUpdateEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
+}
+
+type ChannelUpdateBulkEvent struct {
+	Shard    *Shard    `json:"-"`
+	GuildID  ID        `json:"guild_id"`
+	Channels []Channel `json:"channels"`
+}
+
+type ChannelDeleteEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
 }
 
 // MessageCreateEvent represents a received message.
@@ -576,36 +607,6 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.Ready.emit(event)
-	case "GUILD_DELETE":
-		var raw struct {
-			ID          ID   `json:"id"`
-			Unavailable bool `json:"unavailable"`
-		}
-		err := json.Unmarshal(packet.Data, &raw)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_DELETE data: %w", err)
-		}
-
-		event := GuildRemoveEvent{
-			Shard: s,
-			ID:    raw.ID,
-		}
-
-		if cache != nil {
-			if guild, ok := cache.Guilds.Delete(raw.ID); ok {
-				event.Cached = guild
-			}
-
-			if raw.Unavailable {
-				s.gateway.Cache.UnavailableGuilds.Set(raw.ID, struct{}{})
-			}
-		}
-
-		if raw.Unavailable {
-			s.gateway.GuildUnavailable.emit(event)
-		} else {
-			s.gateway.GuildDelete.emit(event)
-		}
 	case "GUILD_CREATE":
 		var raw struct {
 			Properties Guild     `json:"properties"`
@@ -643,6 +644,102 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildCreate.emit(event)
+	case "GUILD_DELETE":
+		var raw struct {
+			ID          ID   `json:"id"`
+			Unavailable bool `json:"unavailable"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_DELETE data: %w", err)
+		}
+
+		event := GuildRemoveEvent{
+			Shard: s,
+			ID:    raw.ID,
+		}
+
+		if cache != nil {
+			if guild, ok := cache.Guilds.Delete(raw.ID); ok {
+				event.Cached = guild
+			}
+
+			if raw.Unavailable {
+				s.gateway.Cache.UnavailableGuilds.Set(raw.ID, struct{}{})
+			}
+		}
+
+		if raw.Unavailable {
+			s.gateway.GuildUnavailable.emit(event)
+		} else {
+			s.gateway.GuildDelete.emit(event)
+		}
+	case "CHANNEL_CREATE":
+		event := ChannelCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_CREATE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Set(event.ID, event.Channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelCreate.emit(event)
+	case "CHANNEL_UPDATE":
+		event := ChannelUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Set(event.ID, event.Channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelUpdate.emit(event)
+	case "CHANNEL_UPDATE_BULK":
+		event := ChannelUpdateBulkEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE_BULK data: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok && guild.Channels != nil {
+				for _, channel := range event.Channels {
+					guild.Channels.Set(channel.ID, channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelUpdateBulk.emit(event)
+	case "CHANNEL_DELETE":
+		event := ChannelDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_DELETE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Delete(event.Channel.ID)
+				}
+			}
+		}
 	case "MESSAGE_CREATE":
 		event := MessageCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
@@ -650,13 +747,26 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal MESSAGE_CREATE data: %w", err)
 		}
 
-		event.Member.User = event.Author
+		event.Member.User = event.Message.Author
 
 		if cache != nil {
-			event.updateCache(cache)
+			event.Message.updateCache(cache)
+
+			if event.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Update(event.ChannelID, func(val *Channel) {
+						id := event.Message.ID
+						val.LastMessageID = &id
+					})
+				}
+			}
 		}
 
 		s.gateway.MessageCreate.emit(event)
+	default:
+		slog.Warn("don't know how to handle event " + *packet.Event)
+
 	}
 
 	return nil
