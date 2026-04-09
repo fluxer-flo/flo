@@ -8,37 +8,62 @@ import (
 
 //go:generate stringer -type=ChannelType,ChannelPermOverwriteType,MessageType,MessageReferenceType -output=model_channel_string.go
 
+// Channel represents any kind of channel on Fluxer, which may or may not be able to hold messages.
 type Channel struct {
-	ID               ID                     `json:"id"`
-	GuildID          ID                     `json:"guild_id"`
-	Name             *string                `json:"name"`
-	Topic            *string                `json:"topic"`
-	URL              *string                `json:"url"`
-	Icon             *string                `json:"icon"`
-	OwnerID          *string                `json:"owner_id"`
-	Type             ChannelType            `json:"type"`
-	Position         *int                   `json:"position"`
-	ParentID         *ID                    `json:"parent_id"`
-	Bitrate          *int                   `json:"bitrate"`
-	UserLimit        *int                   `json:"user_limit"`
-	RTCRegion        *string                `json:"rtc_region"`
-	LastMessageID    *ID                    `json:"last_message_id"`
-	LastPinAt        *time.Time             `json:"last_pin_timestamp"`
-	PermOverwrites   []ChannelPermOverwrite `json:"permission_overwrites"`
-	Recipients       []any                  `json:"recipients"`
-	NSFW             *bool                  `json:"nsfw"`
-	RateLimitPerUser *int                   `json:"rate_limit_per_user"`
-	Nicks            map[ID]string          `json:"nicks"`
+	// ID is the globally unique identifier for the channel.
+	ID ID `json:"id"`
+	// Type is the type of channel.
+	// Properties of which the presence can currently be used to determine the channel type are subject to change, so it is best to check this property if you want to guarantee the channel type.
+	Type ChannelType `json:"type"`
+	// GuildID is the guild this channel belongs to if this is a guild channel.
+	GuildID *ID `json:"guild_id"`
+	// Name is the name of the channel if applicable.
+	// Regular DMs do not have this, and group DMs only have this if the name is overriden.
+	Name *string `json:"name"`
+	// Topic is the topic description of the channel if this is a guild channel which has it set.
+	Topic *string `json:"topic"`
+	// URL is the link the channel opens upon clicking it if the type is [ChannelTypeGuildLink].
+	URL *string `json:"url"`
+	// Icon is the icon hash of the channel if the type is [ChannelTypeGroupDM].
+	Icon *string `json:"icon"`
+	// OwnerID is the ID of the user owning this channel if the type is [ChannelTypeGroupDM].
+	OwnerID *string `json:"owner_id"`
+	// Position is used to sort guild channels.
+	Position *int `json:"position"`
+	// ParentID is the ID of the category this channel is in if this is a guild channel.
+	ParentID *ID `json:"parent_id"`
+	// Bitrate is the bitrate in bits per second if the type is [ChannelTypeGuildVoice].
+	Bitrate *int `json:"bitrate"`
+	// UserLimit is the maximum number of users allowed to join if the type is [ChannelTypeGuildVoice].
+	UserLimit *int `json:"user_limit"`
+	// RTCRegion is the voice region ID if the type is [ChannelTypeGuildVoice].
+	RTCRegion *string `json:"rtc_region"`
+	// LastMessageID is the ID of the last sent message if this is a textable channel.
+	LastMessageID *ID `json:"last_message_id"`
+	// LastPinAt is the time of the last pin if this is a textable channel.
+	LastPinAt *time.Time `json:"last_pin_timestamp"`
+	// PermOverwrites contains the permission overrides if this is a guild channel.
+	PermOverwrites []ChannelPermOverwrite `json:"permission_overwrites"`
+	// Recipients contains the users with access to the channel if the type is [ChannelTypeDM] or [ChannelTypeGroupDM].
+	Recipients []User `json:"recipients"`
+	// NSFW is true if the channel is marked as age-restricted.
+	NSFW bool `json:"nsfw"`
+	// RateLimitSecs is the slowmode duration in seconds.
+	RateLimitSecs int `json:"rate_limit_per_user"`
+	// Nicks contains custom nicknames for users inside the channel if the type is [ChannelTypeGroupDM].
+	Nicks map[ID]string `json:"nicks"`
 }
 
 func (c *Channel) CreatedAt() time.Time {
 	return c.ID.CreatedAt()
 }
 
+// Mention creates a string which can be used to display the channel in chat.
 func (c *Channel) Mention() string {
 	return fmt.Sprintf("<#%d>", c.ID)
 }
 
+// IsTextable returns true if the channel can contains messages.
 func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
@@ -50,23 +75,23 @@ func (c *Channel) CreateMessage(rest *REST, ctx context.Context, opts CreateMess
 type ChannelType uint
 
 const (
-	ChannelTypeGuildText       ChannelType = 0
-	ChannelTypeDM              ChannelType = 1
-	ChannelTypeGuildVoice      ChannelType = 2
-	ChannelTypeGroupDM         ChannelType = 3
-	ChannelTypeGuildCategory   ChannelType = 4
-	ChannelTypeGuildLink       ChannelType = 998
-	ChannelTypeDMPersonalNotes ChannelType = 999
+	ChannelTypeGuildText     ChannelType = 0
+	ChannelTypeDM            ChannelType = 1
+	ChannelTypeGuildVoice    ChannelType = 2
+	ChannelTypeGroupDM       ChannelType = 3
+	ChannelTypeGuildCategory ChannelType = 4
+	ChannelTypeGuildLink     ChannelType = 998
+	ChannelTypePersonalNotes ChannelType = 999
 )
 
 var textableChannelTypes = [...]bool{
-	ChannelTypeGuildText:       true,
-	ChannelTypeDM:              true,
-	ChannelTypeGuildVoice:      false,
-	ChannelTypeGroupDM:         true,
-	ChannelTypeGuildCategory:   false,
-	ChannelTypeGuildLink:       false,
-	ChannelTypeDMPersonalNotes: true,
+	ChannelTypeGuildText:     true,
+	ChannelTypeDM:            true,
+	ChannelTypeGuildVoice:    false,
+	ChannelTypeGroupDM:       true,
+	ChannelTypeGuildCategory: false,
+	ChannelTypeGuildLink:     false,
+	ChannelTypePersonalNotes: true,
 }
 
 func (c ChannelType) IsTextable() bool {
@@ -88,26 +113,48 @@ type ChannelPermOverwrite struct {
 }
 
 type Message struct {
-	ID               ID                `json:"id"`
-	ChannelID        ID                `json:"channel_id"`
-	Author           User              `json:"author"`
-	WebhookID        *ID               `json:"webhook_id"`
-	Type             MessageType       `json:"type"`
-	Flags            MessageFlags      `json:"flags"`
-	Content          string            `json:"content"`
-	EditedAt         *time.Time        `json:"edited_timestamp"`
-	Pinned           bool              `json:"pinned"`
-	MentionEveryone  bool              `json:"mention_everyone"`
-	TTS              bool              `json:"tts"`
-	Mentions         []User            `json:"mentions"`
-	MentionRoles     []ID              `json:"mention_roles"`
-	Embeds           []Embed           `json:"embeds"`
-	Attachments      []Attachment      `json:"attachments"`
-	Stickers         []MessageSticker  `json:"stickers"`
-	Reactions        []MessageReaction `json:"reactions"`
-	MessageReference MessageReference  `json:"message_reference"`
-	Nonce            *string           `json:"nonce"`
-	Call             *MessageCall      `json:"call"`
+	// ID is the globally unique identifier for the message.
+	ID ID `json:"id"`
+	// ChannelID is the channel that the message belongs to.
+	ChannelID ID `json:"channel_id"`
+	// Type is the type of message.
+	Type MessageType `json:"type"`
+	// Author is the user which sent the message.
+	// If WebhookID is not nil, this is a fake webhook user.
+	// For non-default/reply messages this is the user performing the action.
+	Author User `json:"author"`
+	// WebhookID is the ID of the webhook which sent the message.
+	WebhookID *ID `json:"webhook_id"`
+	// Flags is a set of flags on the message.
+	Flags MessageFlags `json:"flags"`
+	// Content is the textual content of the message, if any.
+	// The meaning varies widely depending on the message type.
+	// You should probably check the message type before reading this.
+	Content string `json:"content"`
+	// EditedAt is the time when the message was last edited.
+	EditedAt *time.Time `json:"edited_timestamp"`
+	// Pinned is true if the message is pinned.
+	Pinned bool `json:"pinned"`
+	// MentionEveryone is true if the message mentions @everyone.
+	MentionEveryone bool `json:"mention_everyone"`
+	// TTS is true if the message is text-to-speech.
+	TTS bool `json:"tts"`
+	// Mentions contains the users mentioned by the message.
+	Mentions []User `json:"mentions"`
+	// MentionRoles contains the roles mentioned by the message.
+	MentionRoles []ID `json:"mention_roles"`
+	// Embeds contains the embeds attached to the message.
+	Embeds []Embed `json:"embeds"`
+	// Attachments contains the files attached to the attached
+	Attachments []Attachment `json:"attachments"`
+	// Stickers contains the stickers sent with the message.
+	Stickers []MessageSticker `json:"stickers"`
+	// Reactions contains the reactions on the message.
+	Reactions []MessageReaction `json:"reactions"`
+	// MessageReference identifies the forwarded or replied to message.
+	MessageReference MessageReference `json:"message_reference"`
+	// Call specifies the call the message represents if the type is [MessageTypeCall].
+	Call  *MessageCall `json:"call"`
 }
 
 func (m *Message) CreatedAt() time.Time {

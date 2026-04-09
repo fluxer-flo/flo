@@ -14,7 +14,7 @@ func _() {
 	_ = x[ChannelTypeGroupDM-3]
 	_ = x[ChannelTypeGuildCategory-4]
 	_ = x[ChannelTypeGuildLink-998]
-	_ = x[ChannelTypeDMPersonalNotes-999]
+	_ = x[ChannelTypePersonalNotes-999]
 }
 
 const (

@@ -53,6 +53,7 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 // 0xRRGGBB can be used to create a color.
 type ColorInt uint32
 
+// String returns a hex color code string for the color.
 func (c ColorInt) String() string {
 	return fmt.Sprintf("#%06X", uint32(c))
 }
@@ -339,6 +340,7 @@ func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	return &entry.val, true
 }
 
+// Clear removes all items from the collection.
 func (c *Collection[T]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

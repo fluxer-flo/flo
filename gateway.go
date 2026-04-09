@@ -42,38 +42,44 @@ type Gateway struct {
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
 
-	// Emitted when a packet on any of the shards is received.
+	// PacketReceived is emitted when a packet on any of the shards is received.
 	PacketReceived Signal[ShardPacketEvent]
-	// Emitted when a guild is deleted or the user has left it.
+	// GuildDelete is emitted when a guild is deleted or the user has left it.
 	GuildDelete Signal[GuildRemoveEvent]
-	// Emitted when a guild is unavailable.
+	// GuildUnavailable is emitted when a guild is unavailable.
 	GuildUnavailable Signal[GuildRemoveEvent]
-	// Emitted when the user has joined a guild.
+	// GuildCreate is emitted when the user has joined a guild.
 	GuildCreate Signal[GuildAddEvent]
-	// Emitted when a guild is no longer unavailable.
+	// GuildAvailable is emitted when a guild is no longer unavailable.
 	GuildAvailable Signal[GuildAddEvent]
-	// Emitted when a user sends a message.
+	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
 	shardsMu sync.RWMutex
 	shards   []*Shard
 }
 
+// GuildRemoveEvent represents a guild becoming unavailable or being left/deleted.
 type GuildRemoveEvent struct {
-	Shard  *Shard
-	ID     ID
+	Shard *Shard
+	ID    ID
+	// Cached is the guild that was removed from the cache by this event, if any.
 	Cached *Guild
 }
 
+// GuildAddEvent represents a guild becoming available or being joined.
 type GuildAddEvent struct {
 	Shard *Shard `json:"-"`
 	Guild
 }
 
+// MessageCreateEvent represents a received message.
 type MessageCreateEvent struct {
-	Shard   *Shard `json:"-"`
-	Member  Member `json:"member"`
-	GuildID ID     `json:"guild_id"`
+	Shard   *Shard  `json:"-"`
+	Member  *Member `json:"member"`
+	GuildID *ID     `json:"guild_id"`
+	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
+	Nonce *string `json:"nonce"`
 	Message
 }
 
@@ -197,8 +203,11 @@ const (
 )
 
 type Shard struct {
+	// PacketReceived is emitted when a packet is received from Fluxer.
 	PacketReceived Signal[ShardPacketEvent]
-	Ready          Signal[ShardReadyEvent]
+	// Ready is emitted when a READY packet is received.
+	// This means the login was successful and contains various information, but no guilds will yet be available on a bot account.
+	Ready Signal[ShardReadyEvent]
 
 	gateway *Gateway
 	id      uint

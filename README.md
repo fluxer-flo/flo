@@ -1,7 +1,20 @@
 # Flo
 
-A cute Go library for making Fluxer bots designed to be not overly abstracted but still pleasant to use!
-User-API related things may also be considered in the future.
+A cute Go library for making Fluxer bots/self-bots designed to be simple in implementation and usage!
+More user-API specific things may be considered in the future, but that is likely more useful for custom clients which is not the current focus.
+
+Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang out!
+
+Features:
+- Rate limiting
+- Caching
+- Sharding (even though Fluxer doesn't actually support it yet!)
+- REST type safety through methods
+  - This is why Flo is all single package! It makes things less modular but in my eyes it is worth it (it is also honestly hard to think of package names that won't conflict with variable names)
+  - Another approach is typed IDs, but this has its downsides - at least taking the approach of [arikawa](https://github.com/diamondburned/arikawa/blob/v3/discord/snowflake_types.go) which duplicates code and uses codegen.
+
+See also:
+- [FluxerGo](https://github.com/fluxergo/fluxergo) - 
 
 ```go
 token := "Bot " + os.Getenv("FLUXER_TOKEN")
