@@ -214,6 +214,11 @@ func (c *Collection[T]) Get(id ID) (T, bool) {
 		}
 
 		entry, ok := c.lookup[id]
+		if !ok {
+			var t T
+			return t, false
+		}
+
 		return entry.val, ok
 	} else {
 		c.mu.Lock()
