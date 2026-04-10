@@ -82,6 +82,26 @@ func (g *Guild) updateProperties(guild *Guild) {
 	g.Roles = oldRoles
 }
 
+type gatewayGuild struct {
+	Properties Guild     `json:"properties"`
+	Channels   []Channel `json:"channels"`
+	Roles      []Role    `json:"roles"`
+}
+
+func (g *Guild) updateGateway(guild *gatewayGuild) {
+	g.updateProperties(&guild.Properties)
+
+	g.Channels.Clear()
+	for _, channel := range guild.Channels {
+		g.Channels.Set(channel.ID, channel)
+	}
+
+	g.Roles.Clear()
+	for _, role := range guild.Roles {
+		g.Roles.Set(role.ID, role)
+	}
+}
+
 type GuildSplashCardAlignment uint
 
 const (

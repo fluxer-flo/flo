@@ -69,6 +69,15 @@ type Gateway struct {
 	shards   []*Shard
 }
 
+var defaultGatewayURL = func() *url.URL {
+	result, err := url.Parse("wss://gateway.fluxer.app")
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}()
+
 // GuildAddEvent represents a guild becoming available or being joined.
 type GuildAddEvent struct {
 	Shard *Shard `json:"-"`
@@ -113,15 +122,6 @@ type MessageCreateEvent struct {
 	Nonce *string `json:"nonce"`
 	Message
 }
-
-var defaultGatewayURL = func() *url.URL {
-	result, err := url.Parse("wss://gateway.fluxer.app")
-	if err != nil {
-		panic(err)
-	}
-
-	return result
-}()
 
 func (g *Gateway) initShards() {
 	if g.shards != nil {
@@ -275,9 +275,18 @@ type ShardPacketEvent struct {
 }
 
 type ShardReadyEvent struct {
-	Shard     *Shard      `json:"-"`
-	SessionID string      `json:"session_id"`
-	User      UserPrivate `json:"user"`
+	Shard     *Shard       `json:"-"`
+	SessionID string       `json:"session_id"`
+	User      UserPrivate  `json:"user"`
+	Guilds    []ReadyGuild `json:"guilds"`
+}
+
+// ReadyGuild represents a guild in the READY payload which may or may not have its properties available.
+type ReadyGuild struct {
+	Unavailable bool
+	ID          ID
+	// Guild is the full guild if unavailable is false.
+	Guild *Guild
 }
 
 type ShardResumeEvent struct {
@@ -300,8 +309,8 @@ func (s *Shard) ID() uint {
 }
 
 var (
-	ErrShardAlreadyRunning      = errors.New("shard already running")
-	ErrShardNotRunning          = errors.New("shard not running")
+	ErrShardAlreadyRunning       = errors.New("shard already running")
+	ErrShardNotRunning           = errors.New("shard not running")
 	ErrShardAlreadyDisconnecting = errors.New("shard already disconnecting")
 )
 
@@ -748,23 +757,83 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 	switch *packet.Event {
 	case "READY":
-		event := ShardReadyEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
+		var raw struct {
+			SessionID string      `json:"session_id"`
+			User      UserPrivate `json:"user"`
+			Guilds    []struct {
+				Unavailable bool `json:"unavailable"`
+				ID          ID   `json:"ID"`
+				gatewayGuild
+			} `json:"guilds"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+
+		s.sessionID = raw.SessionID
+
+		event := ShardReadyEvent{
+			Shard:     s,
+			SessionID: raw.SessionID,
+			User:      raw.User,
+		}
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal READY data: %w", err)
 		}
 
-		s.sessionID = event.SessionID
+		event.Guilds = make([]ReadyGuild, 0, len(raw.Guilds))
+		for _, rawGuild := range raw.Guilds {
+			if rawGuild.Unavailable {
+				if cache != nil {
+					cache.UnavailableGuilds.Set(rawGuild.ID, struct{}{})
+				}
+
+				event.Guilds = append(event.Guilds, ReadyGuild{
+					Unavailable: true,
+					ID:          rawGuild.ID,
+				})
+			} else {
+				guild := newGuildForCache(rawGuild.ID, cache)
+				guild.updateGateway(&rawGuild.gatewayGuild)
+
+				if cache != nil {
+					cache.Guilds.Set(guild.ID, guild)
+					cache.UnavailableGuilds.Delete(guild.ID)
+				}
+
+				event.Guilds = append(event.Guilds, ReadyGuild{
+					Unavailable: false,
+					ID:          rawGuild.Properties.ID,
+					Guild:       &guild,
+				})
+			}
+		}
 
 		s.Ready.emit(event)
+
+		for _, guild := range event.Guilds {
+			if guild.Unavailable {
+				event := GuildRemoveEvent{
+					Shard: s,
+					ID:    guild.ID,
+				}
+
+				if cache != nil {
+					if cached, ok := cache.Guilds.Delete(guild.ID); ok {
+						event.Cached = cached
+					}
+				}
+
+				s.gateway.GuildUnavailable.emit(event)
+			} else {
+				s.gateway.GuildAvailable.emit(GuildAddEvent{
+					Shard: s,
+					Guild: *guild.Guild,
+				})
+			}
+		}
 	case "RESUME":
 		s.Resumed.emit(ShardResumeEvent{s})
 	case "GUILD_CREATE":
-		var raw struct {
-			Properties Guild     `json:"properties"`
-			Channels   []Channel `json:"channels"`
-			Roles      []Role    `json:"roles"`
-		}
+		var raw gatewayGuild
 		err := json.Unmarshal(packet.Data, &raw)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal GUILD_CREATE data: %w", err)
@@ -774,17 +843,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			Shard: s,
 			Guild: newGuildForCache(raw.Properties.ID, cache),
 		}
-		event.Guild.updateProperties(&raw.Properties)
-
-		event.Guild.Channels.Clear()
-		for _, channel := range raw.Channels {
-			event.Guild.Channels.Set(channel.ID, channel)
-		}
-
-		event.Guild.Roles.Clear()
-		for _, role := range raw.Roles {
-			event.Guild.Roles.Set(role.ID, role)
-		}
+		event.Guild.updateGateway(&raw)
 
 		if cache != nil {
 			cache.Guilds.Set(event.Guild.ID, event.Guild)
@@ -812,12 +871,12 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			if guild, ok := cache.Guilds.Delete(raw.ID); ok {
-				event.Cached = guild
+			if cached, ok := cache.Guilds.Delete(raw.ID); ok {
+				event.Cached = cached
 			}
 
 			if raw.Unavailable {
-				s.gateway.Cache.UnavailableGuilds.Set(raw.ID, struct{}{})
+				cache.UnavailableGuilds.Set(raw.ID, struct{}{})
 			}
 		}
 
