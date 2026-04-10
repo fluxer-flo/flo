@@ -240,6 +240,7 @@ type Shard struct {
 
 	gateway *Gateway
 	id      uint
+	log     *slog.Logger
 
 	stateMu    sync.Mutex
 	state      shardState
@@ -250,10 +251,12 @@ type Shard struct {
 	outbound         chan GatewayPacket
 	readErr          chan error
 	writeErr         chan error
-	lastSeq          uint
 	heartbeat        <-chan time.Time
 	pendingHeartRate time.Duration
 	heartbeatACK     bool
+
+	sessionID string
+	lastSeq   uint
 }
 
 type ShardPacketEvent struct {
@@ -262,15 +265,16 @@ type ShardPacketEvent struct {
 }
 
 type ShardReadyEvent struct {
-	Shard *Shard      `json:"-"`
-	User  UserPrivate `json:"user"`
+	Shard     *Shard      `json:"-"`
+	SessionID string      `json:"session_id"`
+	User      UserPrivate `json:"user"`
 }
 
 type GatewayPacket struct {
-	Opcode      GatewayOpcode   `json:"op"`
-	Data        json.RawMessage `json:"d"`
-	SequenceNum *uint           `json:"s"`
-	Event       *string         `json:"t"`
+	Opcode GatewayOpcode   `json:"op"`
+	Data   json.RawMessage `json:"d"`
+	Seq    *uint           `json:"s"`
+	Event  *string         `json:"t"`
 }
 
 func (s *Shard) Gateway() *Gateway {
@@ -316,26 +320,15 @@ func (s *Shard) Disconnect(reconnect bool) error {
 	return nil
 }
 
-func shouldReconnectShard(code int) bool {
-	switch code {
-	case 4004: // authentication failed
-		return false
-	case 4010: // invalid shard
-		return false
-	case 4011: // sharding required
-		return false
-	case 4012: // invalid API version
-		return false
-	default:
-		return true
-	}
-}
-
 func (s *Shard) run() {
 	var sleepTime time.Duration
 	for {
 		time.Sleep(sleepTime)
-		sleepTime = time.Second
+		if sleepTime == 0 {
+			sleepTime = time.Second
+		} else if sleepTime < 32*time.Second {
+			sleepTime *= 2
+		}
 
 		dialer := s.gateway.Dialer
 		if dialer == nil {
@@ -370,8 +363,8 @@ func (s *Shard) run() {
 		s.writeErr = make(chan error)
 		s.lastSeq = 0
 		s.heartbeat = nil
-		s.pendingHeartRate = 0
 		s.heartbeatACK = true
+		s.pendingHeartRate = 0
 
 		go s.readLoop()
 		go s.writeLoop()
@@ -382,6 +375,9 @@ func (s *Shard) run() {
 		var closeErr *websocket.CloseError
 		if errors.As(err, &closeErr) {
 			reconnect = shouldReconnectShard(closeErr.Code)
+			if shouldInvalidateSession(closeErr.Code) {
+				s.resetSession()
+			}
 		}
 
 		if reconnect {
@@ -415,6 +411,30 @@ func (s *Shard) run() {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	s.state = shardStateDisconnected
+}
+
+func shouldReconnectShard(code int) bool {
+	switch code {
+	case 4004: // authentication failed
+		return false
+	case 4010: // invalid shard
+		return false
+	case 4011: // sharding required
+		return false
+	case 4012: // invalid API version
+		return false
+	default:
+		return true
+	}
+}
+
+func shouldInvalidateSession(code int) bool {
+	return code == 4009 // session timed out
+}
+
+func (s *Shard) resetSession() {
+	s.sessionID = ""
+	s.lastSeq = 0
 }
 
 func (s *Shard) readLoop() {
@@ -491,16 +511,6 @@ func (s *Shard) controlLoop() error {
 	}
 }
 
-type gatewayIdentifyPayload struct {
-	Token      string  `json:"token"`
-	Shard      [2]uint `json:"shard,omitempty"`
-	Properties struct {
-		OS      string `json:"os"`
-		Browser string `json:"browser"`
-		Device  string `json:"device"`
-	} `json:"properties"`
-}
-
 func (s *Shard) handlePacket(packet GatewayPacket) error {
 	event := ShardPacketEvent{
 		Shard:         s,
@@ -512,12 +522,12 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 		slog.Warn("error in PacketReceived handler", slog.Any("err", err))
 	}
 
-	if packet.SequenceNum != nil {
-		if *packet.SequenceNum != s.lastSeq+1 {
-			slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", s.lastSeq, *packet.SequenceNum))
+	if packet.Seq != nil {
+		if *packet.Seq != s.lastSeq+1 {
+			slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", s.lastSeq, *packet.Seq))
 		}
 
-		s.lastSeq = *packet.SequenceNum
+		s.lastSeq = *packet.Seq
 	}
 
 	switch packet.Opcode {
@@ -544,24 +554,12 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 
 		s.heartbeat = time.After(time.Duration(initialWait.Int64()) * time.Millisecond)
 
-		payload := gatewayIdentifyPayload{
-			Token: s.gateway.Auth,
-			Shard: [2]uint{s.id, s.gateway.TotalShards},
-		}
-
-		payload.Properties.OS = runtime.GOOS
-		payload.Properties.Browser = defaultUserAgent
-		payload.Properties.Device = defaultUserAgent
-
-		data, err := json.Marshal(payload)
+		err = s.identifyOrResume()
 		if err != nil {
-			return fmt.Errorf("failed to marshal identify packet data: %w", err)
+			return err
 		}
-
-		s.outbound <- GatewayPacket{
-			Opcode: GatewayOpIdentify,
-			Data:   data,
-		}
+	case GatewayOpReconnect:
+		return errors.New("receieved reconnect packet")
 	case GatewayOpHeartbeat:
 		s.sendHeartbeat()
 	case GatewayOpHeartbeatACK:
@@ -573,6 +571,67 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 		}
 	default:
 		slog.Warn("don't know how to handle " + packet.Opcode.String())
+	}
+
+	return nil
+}
+
+type gatewayIdentifyPayload struct {
+	Token      string  `json:"token"`
+	Shard      [2]uint `json:"shard,omitempty"`
+	Properties struct {
+		OS      string `json:"os"`
+		Browser string `json:"browser"`
+		Device  string `json:"device"`
+	} `json:"properties"`
+}
+
+type gatewayResumePayload struct {
+	Token     string `json:"token"`
+	SessionID string `json:"session_id"`
+	Seq       uint   `json:"seq"`
+}
+
+func (s *Shard) identifyOrResume() error {
+	if s.sessionID == "" {
+		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
+
+		payload := gatewayIdentifyPayload{
+			Token: s.gateway.Auth,
+			Shard: [2]uint{s.id, s.gateway.TotalShards},
+		}
+
+		payload.Properties.OS = runtime.GOOS
+		payload.Properties.Browser = defaultUserAgent
+		payload.Properties.Device = defaultUserAgent
+
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal Identify packet data: %w", err)
+		}
+
+		s.outbound <- GatewayPacket{
+			Opcode: GatewayOpIdentify,
+			Data:   data,
+		}
+	} else {
+		slog.Debug("have existing session; sending resume packet", slog.Any("shard", s.id), slog.Any("session", s.sessionID))
+
+		payload := gatewayResumePayload{
+			Token:     s.gateway.Auth,
+			SessionID: s.sessionID,
+			Seq:       s.lastSeq,
+		}
+
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal Resume packet data: %w", err)
+		}
+
+		s.outbound <- GatewayPacket{
+			Opcode: GatewayOpResume,
+			Data:   data,
+		}
 	}
 
 	return nil
@@ -592,6 +651,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal READY data: %w", err)
 		}
+
+		s.sessionID = event.SessionID
 
 		s.Ready.emit(event)
 	case "GUILD_CREATE":
@@ -761,19 +822,16 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	return nil
 }
 
-func (s *Shard) marshalSeq() []byte {
-	if s.lastSeq == 0 {
-		return []byte("null")
-	} else {
-		return fmt.Append(nil, s.lastSeq)
-	}
-
-}
-
 func (s *Shard) sendHeartbeat() {
 	s.heartbeatACK = false
+
+	data := []byte("null")
+	if s.lastSeq != 0 {
+		data = fmt.Append(nil, s.lastSeq)
+	}
+
 	s.outbound <- GatewayPacket{
 		Opcode: GatewayOpHeartbeat,
-		Data:   s.marshalSeq(),
+		Data:   data,
 	}
 }
