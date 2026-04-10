@@ -8,7 +8,6 @@ import (
 )
 
 // ID represents an ID on Fluxer, which contains an embedded timestamp.
-// The zero value is often used to represent the absence of an ID.
 type ID uint64
 
 var idEpoch = func() time.Time {
