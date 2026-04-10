@@ -34,7 +34,7 @@ type Guild struct {
 	MFALevel              GuildMFALevel              `json:"mfa_level"`
 	NSFWLevel             GuildNSFWLevel             `json:"nsfw_level"`
 	ExplicitContentFilter GuildExplicitContentFilter `json:"explicit_content_filter"`
-	DefaultMessageNotifs  UserNotifSettings          `json:"default_message_notifs"`
+	DefaultMessageNotifs  UserNotifSettings          `json:"default_message_notifications"`
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
 	MessageHistoryCutoff  *time.Time                 `json:"message_history_cutoff"`
 
