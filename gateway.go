@@ -31,6 +31,8 @@ type Gateway struct {
 	// Dialer specifies options for connecting to the WebSocket server (from Gorilla WebSocket).
 	// If nil, websocket.DefaultDialer is used.
 	Dialer *websocket.Dialer
+	// ReconnectDelay determines how long to wait before reconnecting on the nth dial attempt.
+	ReconnectDelay func(n uint) time.Duration
 
 	// FirstShard is the first and lowest shard ID to connect to.
 	// If it is greater than LastShard trying to access any shard will panic.
@@ -169,9 +171,9 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 	return shards[id-g.FirstShard], true
 }
 
-// Connect connects all shards which are not already connected.
+// Connect attemps to starts all shards.
 // The sharding parameters should not be changed after this is called.
-// If some of the shards were already connected an error will be returned.
+// If some of the shards were already running an error will be returned.
 // You may ignore this if it is not important.
 func (g *Gateway) Connect() error {
 	var errs []error
@@ -189,8 +191,8 @@ func (g *Gateway) Connect() error {
 	return errors.Join(errs...)
 }
 
-// Disconnect disconnects all connected shards.
-// If some of the shards were not connected an error will be returned.
+// Disconnect attemps to disconnect all running shards.
+// If some of the shards were not running or already disconnecting an error will be returned.
 func (g *Gateway) Disconnect(reconnect bool) error {
 	var errs []error
 	for _, shard := range g.Shards() {
@@ -223,28 +225,27 @@ const (
 	GatewayOpHeartbeatACK        GatewayOpcode = 11
 )
 
-type shardState uint
-
-const (
-	shardStateDisconnected shardState = iota
-	shardStateConnected
-	shardStateDisconnecting
-)
-
 type Shard struct {
 	// PacketReceived is emitted when a packet is received from Fluxer.
 	PacketReceived Signal[ShardPacketEvent]
 	// Ready is emitted when a READY packet is received.
 	// This means the login was successful and contains various information, but no guilds will yet be available on a bot account.
 	Ready Signal[ShardReadyEvent]
+	// Resumed is emitted when a RESUMED packet is received.
+	// This means a session was successfully resumed, but this won't always happen when reconnecting.
+	// If resuming failed, a new session will be started which will cause Ready to be emitted again.
+	Resumed Signal[ShardResumeEvent]
 
 	gateway *Gateway
 	id      uint
 	log     *slog.Logger
 
-	stateMu    sync.Mutex
-	state      shardState
-	disconnect chan bool // bool = whether to reconnect
+	// stateMu is the mutex for the shared state of the shard.
+	stateMu       sync.Mutex
+	running       bool
+	reqDisconnect context.CancelFunc
+	reqReconnect  bool
+	// (end of shared state - the remaining fields are only used by a single goroutine at a time)
 
 	conn             *websocket.Conn
 	inbound          chan GatewayPacket
@@ -259,6 +260,15 @@ type Shard struct {
 	lastSeq   uint
 }
 
+type shardState uint
+
+const (
+	shardStateDisconnected shardState = iota
+	shardStateDisconnecting
+	shardStateConnecting
+	shardStateConnected
+)
+
 type ShardPacketEvent struct {
 	Shard *Shard `json:"-"`
 	GatewayPacket
@@ -268,6 +278,10 @@ type ShardReadyEvent struct {
 	Shard     *Shard      `json:"-"`
 	SessionID string      `json:"session_id"`
 	User      UserPrivate `json:"user"`
+}
+
+type ShardResumeEvent struct {
+	Shard *Shard
 }
 
 type GatewayPacket struct {
@@ -286,21 +300,25 @@ func (s *Shard) ID() uint {
 }
 
 var (
-	ErrShardAlreadyConnected     = errors.New("shard already connected")
+	ErrShardAlreadyRunning      = errors.New("shard already running")
+	ErrShardNotRunning          = errors.New("shard not running")
 	ErrShardAlreadyDisconnecting = errors.New("shard already disconnecting")
-	ErrShardAlreadyDisconnected  = errors.New("shard already disconnected")
 )
 
 func (s *Shard) Connect() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	if s.state != shardStateDisconnected {
-		return ErrShardAlreadyConnected
+	if s.running {
+		return ErrShardAlreadyRunning
 	}
 
-	s.state = shardStateConnected
-	go s.run()
+	s.running = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.reqDisconnect = cancel
+
+	go s.run(ctx, cancel)
 	return nil
 }
 
@@ -308,109 +326,31 @@ func (s *Shard) Disconnect(reconnect bool) error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	switch s.state {
-	case shardStateDisconnected:
-		return ErrShardAlreadyDisconnected
-	case shardStateDisconnecting:
+	if !s.running {
+		return ErrShardNotRunning
+	}
+
+	if s.reqDisconnect == nil {
 		return ErrShardAlreadyDisconnecting
 	}
 
-	s.state = shardStateDisconnecting
-	s.disconnect <- reconnect
+	s.reqDisconnect()
+	s.reqDisconnect = nil
+	s.reqReconnect = reconnect
 	return nil
 }
 
-func (s *Shard) run() {
-	var sleepTime time.Duration
-	for {
-		time.Sleep(sleepTime)
-		if sleepTime == 0 {
-			sleepTime = time.Second
-		} else if sleepTime < 32*time.Second {
-			sleepTime *= 2
+func (s *Shard) sleepTime(attempts uint) time.Duration {
+	if s.gateway.ReconnectDelay != nil {
+		return s.gateway.ReconnectDelay(attempts)
+	} else {
+		result := time.Second
+		for range min(attempts, 6) - 1 {
+			result *= 2
 		}
 
-		dialer := s.gateway.Dialer
-		if dialer == nil {
-			dialer = websocket.DefaultDialer
-		}
-
-		url := *defaultGatewayURL
-		if s.gateway.ConnURL != nil {
-			url = *s.gateway.ConnURL
-		}
-
-		query := url.Query()
-		if !query.Has("v") {
-			query.Add("v", "1")
-		}
-		url.RawQuery = query.Encode()
-
-		conn, _, err := dialer.DialContext(context.TODO(), url.String(), http.Header{})
-		if err != nil {
-			slog.Warn(
-				"failed to establish websocket connection; retrying in "+sleepTime.String(),
-				slog.Any("shard", s.id),
-				slog.Any("err", err),
-			)
-			continue
-		}
-
-		s.conn = conn
-		s.inbound = make(chan GatewayPacket)
-		s.outbound = make(chan GatewayPacket, 1024)
-		s.readErr = make(chan error)
-		s.writeErr = make(chan error)
-		s.lastSeq = 0
-		s.heartbeat = nil
-		s.heartbeatACK = true
-		s.pendingHeartRate = 0
-
-		go s.readLoop()
-		go s.writeLoop()
-
-		err = s.controlLoop()
-		reconnect := true
-
-		var closeErr *websocket.CloseError
-		if errors.As(err, &closeErr) {
-			reconnect = shouldReconnectShard(closeErr.Code)
-			if shouldInvalidateSession(closeErr.Code) {
-				s.resetSession()
-			}
-		}
-
-		if reconnect {
-			slog.Warn(
-				"error with webhook connection; reconnecting in "+sleepTime.String(),
-				slog.Any("shard", s.ID),
-				slog.Any("err", err),
-			)
-		} else {
-			slog.Warn(
-				"unrecoverable error with webhook connection; not reconnecting",
-				slog.Any("shard", s.ID),
-				slog.Any("err", err),
-			)
-		}
-
-		err = s.conn.Close()
-		if err != nil {
-			slog.Warn(
-				"error closing webhook connection",
-				slog.Any("shard", s.ID),
-				slog.Any("err", err),
-			)
-		}
-
-		if !reconnect {
-			break
-		}
+		return result
 	}
-
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	s.state = shardStateDisconnected
 }
 
 func shouldReconnectShard(code int) bool {
@@ -435,6 +375,151 @@ func shouldInvalidateSession(code int) bool {
 func (s *Shard) resetSession() {
 	s.sessionID = ""
 	s.lastSeq = 0
+}
+
+func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
+	var attempts uint
+	var sleepTime time.Duration
+
+	for {
+		if attempts != 0 {
+			ctx, cancel = context.WithCancel(context.Background())
+
+			s.stateMu.Lock()
+			s.reqDisconnect = cancel
+			s.stateMu.Unlock()
+		}
+
+		if sleepTime != 0 {
+			var disconnect bool
+
+			select {
+			case <-ctx.Done():
+				slog.Debug(
+					"shard explicitly disconnected before connect",
+					slog.Any("shard", s.ID),
+					slog.Bool("reconnect", s.reqReconnect),
+				)
+
+				s.stateMu.Lock()
+				disconnect = !s.reqReconnect
+				s.stateMu.Unlock()
+			case <-time.After(sleepTime):
+			}
+
+			if disconnect {
+				break
+			}
+		}
+
+		dialer := s.gateway.Dialer
+		if dialer == nil {
+			dialer = websocket.DefaultDialer
+		}
+
+		url := *defaultGatewayURL
+		if s.gateway.ConnURL != nil {
+			url = *s.gateway.ConnURL
+		}
+
+		query := url.Query()
+		if !query.Has("v") {
+			query.Add("v", "1")
+		}
+		url.RawQuery = query.Encode()
+
+		slog.Debug("attempting to establish websocket connection", slog.Any("shard", s.id))
+
+		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
+		if errors.Is(err, context.Canceled) {
+			attempts++
+			sleepTime = s.sleepTime(attempts)
+
+			slog.Debug(
+				"shard explicitly disconnected while establishing websocket connection; reconnecting in "+sleepTime.String(),
+				slog.Any("shard", s.ID),
+				slog.Bool("reconnect", s.reqReconnect),
+			)
+
+			if s.reqReconnect {
+				continue
+			} else {
+				break
+			}
+		} else if err != nil {
+			attempts++
+			sleepTime = s.sleepTime(attempts)
+
+			slog.Warn(
+				"failed to establish websocket connection; retrying in "+sleepTime.String(),
+				slog.Any("shard", s.id),
+				slog.Any("err", err),
+			)
+			continue
+		} else {
+			attempts = 1
+			sleepTime = s.sleepTime(attempts)
+		}
+
+		s.conn = conn
+		s.inbound = make(chan GatewayPacket)
+		s.outbound = make(chan GatewayPacket, 1024)
+		s.readErr = make(chan error)
+		s.writeErr = make(chan error)
+		s.heartbeat = nil
+		s.heartbeatACK = true
+		s.pendingHeartRate = 0
+
+		go s.readLoop()
+		go s.writeLoop()
+
+		err = s.controlLoop(ctx)
+		reconnect := true
+
+		var closeErr *websocket.CloseError
+		if errors.As(err, &closeErr) {
+			reconnect = shouldReconnectShard(closeErr.Code)
+			if shouldInvalidateSession(closeErr.Code) {
+				s.resetSession()
+			}
+		} else if errors.Is(err, context.Canceled) {
+			reconnect = s.reqReconnect
+			slog.Debug("shard explicitly disconnected; reconnecting in "+sleepTime.String(), slog.Any("shard", s.ID), slog.Bool("reconnect", reconnect))
+		} else {
+			if reconnect {
+				slog.Warn(
+					"error with webhook connection; reconnecting in "+sleepTime.String(),
+					slog.Any("shard", s.ID),
+					slog.Any("err", err),
+				)
+			} else {
+				slog.Warn(
+					"unrecoverable error with webhook connection; not reconnecting",
+					slog.Any("shard", s.ID),
+					slog.Any("err", err),
+				)
+			}
+		}
+
+		err = s.conn.Close()
+		if err != nil {
+			slog.Warn(
+				"error closing webhook connection",
+				slog.Any("shard", s.ID),
+				slog.Any("err", err),
+			)
+		}
+
+		cancel()
+
+		if !reconnect {
+			break
+		}
+	}
+
+	s.stateMu.Lock()
+	s.running = false
+	s.stateMu.Unlock()
 }
 
 func (s *Shard) readLoop() {
@@ -484,7 +569,7 @@ func (s *Shard) writeLoop() {
 }
 
 // controlLoop handles incoming messages and the heartbeat interval.
-func (s *Shard) controlLoop() error {
+func (s *Shard) controlLoop(ctx context.Context) error {
 	for {
 		select {
 		case err := <-s.writeErr:
@@ -507,6 +592,8 @@ func (s *Shard) controlLoop() error {
 			}
 
 			s.sendHeartbeat()
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
@@ -537,7 +624,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 		}
 		err := json.Unmarshal(packet.Data, &helloData)
 		if err != nil {
-			return fmt.Errorf("failed to decode hello packet data: %w", err)
+			return fmt.Errorf("failed to unmarshal Hello packet data: %w", err)
 		}
 
 		if helloData.HeartbeatInterval <= 0 {
@@ -554,12 +641,27 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 
 		s.heartbeat = time.After(time.Duration(initialWait.Int64()) * time.Millisecond)
 
-		err = s.identifyOrResume()
+		err = s.establishSession()
 		if err != nil {
 			return err
 		}
 	case GatewayOpReconnect:
 		return errors.New("receieved reconnect packet")
+	case GatewayOpInvalidSession:
+		var resumable bool
+		err := json.Unmarshal(packet.Data, &resumable)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal InvalidSession packet data: %w", err)
+		}
+
+		if !resumable {
+			s.resetSession()
+		}
+
+		err = s.establishSession()
+		if err != nil {
+			return err
+		}
 	case GatewayOpHeartbeat:
 		s.sendHeartbeat()
 	case GatewayOpHeartbeatACK:
@@ -592,7 +694,7 @@ type gatewayResumePayload struct {
 	Seq       uint   `json:"seq"`
 }
 
-func (s *Shard) identifyOrResume() error {
+func (s *Shard) establishSession() error {
 	if s.sessionID == "" {
 		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
 
@@ -655,6 +757,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		s.sessionID = event.SessionID
 
 		s.Ready.emit(event)
+	case "RESUME":
+		s.Resumed.emit(ShardResumeEvent{s})
 	case "GUILD_CREATE":
 		var raw struct {
 			Properties Guild     `json:"properties"`
@@ -816,7 +920,6 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		s.gateway.MessageCreate.emit(event)
 	default:
 		slog.Warn("don't know how to handle event " + *packet.Event)
-
 	}
 
 	return nil
