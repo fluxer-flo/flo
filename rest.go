@@ -63,6 +63,8 @@ type RESTRequest struct {
 type RESTFormField struct {
 	FieldName string
 	FileName  string
+	// Content has the content copied from it into the form body.
+	// It can be assumed to be closed after it is passed into Request.
 	Content   io.ReadCloser
 }
 
@@ -78,12 +80,17 @@ type RESTRateLimitConfig struct {
 
 // Request sends a Request to a Fluxer endpoint. If the returned error is nil, the response body should be closed.
 func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, error) {
-	if req.RateLimit.Bucket != "" {
-		err := r.acquireBucketSlot(ctx, req.RateLimit)
-		if err != nil {
-			return nil, err
+	closeFiles := func() {
+		for _, field := range req.Form {
+			field.Content.Close()
 		}
 	}
+	closedFiles := false
+	defer func() {
+		if !closedFiles {
+			closeFiles()
+		}
+	}()
 
 	httpURL := r.BaseURL
 	if httpURL == nil {
@@ -130,6 +137,16 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
+
+	if req.RateLimit.Bucket != "" {
+		err := r.acquireBucketSlot(ctx, req.RateLimit)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	closeFiles()
+	closedFiles = true
 
 	resp, err := r.Client.Do(httpReq)
 	if err != nil {
