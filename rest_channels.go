@@ -3,17 +3,24 @@ package flo
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 )
 
 // CreateMessageOpts specifies a message to send.
 type CreateMessageOpts struct {
-	Content         string           `json:"content,omitempty"`
-	Embeds          []EmbedOpts      `json:"embeds,omitempty"`
-	AllowedMentions *AllowedMentions `json:"allowed_mentions,omitempty"`
+	Content          string                 `json:"content,omitempty"`
+	Embeds           []EmbedOpts            `json:"embeds,omitempty"`
+	Attachments      []CreateAttachmentOpts `json:"attachments,omitempty"`
+	MessageReference MessageReferenceOpts   `json:"message_reference,omitzero"`
+	AllowedMentions  *AllowedMentions       `json:"allowed_mentions,omitempty"`
+	Flags            MessageFlags           `json:"flags,omitzero"`
+	Nonce            string                 `json:"nonce,omitempty"`
+	StickerIDs       []ID                   `json:"sticker_ids,omitempty"`
+	TTS              bool                   `json:"tts,omitzero"`
 }
 
-// EmbedOpts specifies a rich embed when sending or editing a message.
+// EmbedOpts specifies a rich embed when creating or editing a message.
 type EmbedOpts struct {
 	URL         string          `json:"url,omitempty"`
 	Title       string          `json:"title,omitempty"`
@@ -27,30 +34,52 @@ type EmbedOpts struct {
 	Fields      []EmbedField    `json:"fields,omitempty"`
 }
 
-// EmbedAuthorOpts specifies an embed author when sending or editing a message.
+// EmbedAuthorOpts specifies an embed author when creating or editing a message.
 type EmbedAuthorOpts struct {
 	Name    string `json:"name"`
 	URL     string `json:"url,omitempty"`
 	IconURL string `json:"icon_url,omitempty"`
 }
 
-// EmbedAuthorOpts specifies embed media when sending or editing a message.
+// EmbedAuthorOpts specifies embed media when creating or editing a message.
 type EmbedMediaOpts struct {
 	URL         string `json:"url"`
 	Description string `json:"description,omitempty"`
 }
 
-// EmbedAuthorOpts specifies an embed footer when sending or editing a message.
+// EmbedAuthorOpts specifies an embed footer when creating or editing a message.
 type EmbedFooterOpts struct {
 	Text    string `json:"text"`
 	IconURL string `json:"icon_url,omitempty"`
 }
 
+// CreateAttachmentOpts specifies an attachment when creating a message.
+type CreateAttachmentOpts struct {
+	// ID is the placeholder ID used for the attachment.
+	// An actual [ID] will be generated when sending the message.
+	ID          uint            `json:"id"`
+	Filename    string          `json:"filename"`
+	Title       string          `json:"title,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Flags       AttachmentFlags `json:"flags,omitzero"`
+	Content     io.ReadCloser   `json:"-"`
+	// TODO: waveform?
+}
+
+// AllowedMentions specifies allowed mentions when creating or editing a message.
 type AllowedMentions struct {
 	Parse       []AllowedMentionsParse `json:"parse,omitzero"`
 	Users       []ID                   `json:"users,omitzero"`
 	Roles       []ID                   `json:"roles,omitzero"`
 	RepliedUser *bool                  `json:"replied_user,omitempty"`
+}
+
+// MessageReferenceOpts specifies a message reference (reply or forward) when sending or editing a message.
+type MessageReferenceOpts struct {
+	MessageID ID                   `json:"message_id"`
+	ChannelID ID                   `json:"channel_id,omitzero"`
+	GuildID   ID                   `json:"guild_id,omitzero"`
+	Type      MessageReferenceType `json:"type"`
 }
 
 type AllowedMentionsParse string
@@ -74,12 +103,33 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 		opts.AllowedMentions = r.DefaultAllowedMentions
 	}
 
+	var files []RESTFormField
+	if len(opts.Attachments) != 0 {
+		files = make([]RESTFormField, 0, len(opts.Attachments))
+
+		var id uint
+		for i := range opts.Attachments {
+			attachment := &opts.Attachments[i]
+			if attachment.ID == 0 {
+				id++
+				attachment.ID = id
+			}
+
+			files = append(files, RESTFormField{
+				FieldName: fmt.Sprintf("files[%d]", id),
+				FileName: "-",
+				Content:   attachment.Content,
+			})
+		}
+	}
+
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "POST",
 		Path:      fmt.Sprintf("/v1/channels/%d/messages", channelID),
 		RateLimit: rateLimitCreateMessage(channelID),
 		Payload:   opts,
+		Form:      files,
 	}, &resp)
 	if err != nil {
 		return Message{}, err

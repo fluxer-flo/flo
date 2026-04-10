@@ -283,7 +283,7 @@ func (r *REST) acquireBucketSlot(ctx context.Context, conf RESTRateLimitConfig) 
 
 func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 	var buf bytes.Buffer
-	var form multipart.Writer
+	form := multipart.NewWriter(&buf)
 
 	for _, field := range req.Form {
 		var writer io.Writer
@@ -319,6 +319,8 @@ func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to end form: %w", err)
 	}
+
+	fmt.Println(buf.String())
 
 	contentType := mime.FormatMediaType("multipart/form-data", map[string]string{
 		"boundary": form.Boundary(),
