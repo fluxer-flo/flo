@@ -432,7 +432,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
 		if errors.Is(err, context.Canceled) {
-			attempts++
+			attempts = 1
 			sleepTime = s.sleepTime(attempts)
 
 			slog.Debug(
