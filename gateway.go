@@ -808,6 +808,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		err := json.Unmarshal(packet.Data, &raw)
 
 		s.sessionID = raw.SessionID
+		if cache != nil {
+			cache.UpdateCurrentUser(raw.User)
+		}
 
 		event := ShardReadyEvent{
 			Shard:     s,

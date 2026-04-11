@@ -1,5 +1,7 @@
 package flo
 
+import "sync"
+
 // Cache specifies caching targets and configuration.
 // The zero value for Cache does not cache anything - use [NewCacheDefault] for generous defaults.
 type Cache struct {
@@ -13,6 +15,11 @@ type Cache struct {
 	MakeGuild func(ID) Guild
 	// Users is populated by requested users or whatever is available from other gateway/REST paylods.
 	Users Collection[User]
+	// CacheCurrentUser is used to determine whether to cache the [UserPrivate] object for the authenticated user.
+	CacheCurrentUser bool
+	currentUserMu    sync.RWMutex
+	hasCurrentUser   bool
+	currentUser      UserPrivate
 }
 
 // NewCacheDefault returns a Cache which prioritises out-of-the-box usability.
@@ -29,6 +36,45 @@ func NewCacheDefault() Cache {
 				Roles:    &roles,
 			}
 		},
-		Users: NewCollectionUnlimited[User](),
+		Users:            NewCollectionUnlimited[User](),
+		CacheCurrentUser: true,
+	}
+}
+
+func (c *Cache) CurrentUser() (UserPrivate, bool) {
+	c.currentUserMu.RLock()
+	defer c.currentUserMu.RUnlock()
+
+	if c.CacheCurrentUser {
+		return c.currentUser, true
+	} else {
+		return UserPrivate{}, false
+	}
+}
+
+func (c *Cache) ExpectCurrentUser() UserPrivate {
+	user, ok := c.CurrentUser()
+	if !ok {
+		panic("expected CurrentUser() to be present")
+	}
+
+	return user
+}
+
+func (c *Cache) ClearCurrentUser() {
+	c.currentUserMu.Lock()
+	defer c.currentUserMu.Unlock()
+
+	c.currentUser = UserPrivate{}
+	c.hasCurrentUser = false
+}
+
+func (c *Cache) UpdateCurrentUser(user UserPrivate) {
+	c.currentUserMu.Lock()
+	defer c.currentUserMu.Unlock()
+
+	if c.CacheCurrentUser {
+		c.hasCurrentUser = true
+		c.currentUser = user
 	}
 }
