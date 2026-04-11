@@ -64,6 +64,10 @@ type Gateway struct {
 	ChannelDelete Signal[ChannelDeleteEvent]
 	// RoleCreate is emitted when a guild role is created.
 	RoleCreate Signal[RoleCreateEvent]
+	// RoleUpdate is emitted when a guild role is updated.
+	RoleUpdate Signal[RoleUpdateEvent]
+	// RoleUpdateBulk is emitted when multiple guild role updates are reported at once.
+	RoleUpdateBulk Signal[RoleUpdateBulkEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
@@ -125,6 +129,12 @@ type RoleUpdateEvent struct {
 	Shard   *Shard `json:"-"`
 	GuildID ID     `json:"-"`
 	Role
+}
+
+type RoleUpdateBulkEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	Roles   []Role `json:"roles"`
 }
 
 type RoleDeleteEvent struct {
@@ -1015,14 +1025,14 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				}
 			}
 		}
-	case "ROLE_CREATE":
+	case "GUILD_ROLE_CREATE":
 		var raw struct {
 			GuildID ID   `json:"id"`
 			Role    Role `json:"role"`
 		}
 		err := json.Unmarshal(packet.Data, &raw)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal ROLE_CREATE data: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_ROLE_CREATE data: %w", err)
 		}
 
 		if cache != nil {
@@ -1038,6 +1048,61 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			Role:    raw.Role,
 		}
 		s.gateway.RoleCreate.emit(event)
+	case "GUILD_ROLE_UPDATE":
+		var raw struct {
+			GuildID ID   `json:"id"`
+			Role    Role `json:"role"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_ROLE_UPDATE data: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(raw.GuildID)
+			if ok {
+				guild.Roles.Set(raw.Role.ID, raw.Role)
+			}
+		}
+
+		event := RoleUpdateEvent{
+			Shard:   s,
+			GuildID: raw.GuildID,
+			Role:    raw.Role,
+		}
+		s.gateway.RoleUpdate.emit(event)
+	case "GUILD_ROLE_UPDATE_BULK":
+		event := RoleUpdateBulkEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_ROLE_UPDATE_BULK data: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok && guild.Roles != nil {
+				for _, role := range event.Roles {
+					guild.Roles.Set(role.ID, role)
+				}
+			}
+		}
+
+		s.gateway.RoleUpdateBulk.emit(event)
+	case "GUILD_ROLE_DELETE":
+		event := RoleDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_ROLE_DELETE: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok && guild.Roles != nil {
+				if role, ok := guild.Roles.Delete(event.RoleID); ok {
+					event.Cached = role
+				}
+			}
+		}
 	case "MESSAGE_CREATE":
 		event := MessageCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
