@@ -1,0 +1,135 @@
+package flo
+
+type gatewayEvents struct {
+	// GuildCreate is emitted when the user has joined a guild.
+	GuildCreate Signal[GuildAddEvent]
+	// GuildAvailable is emitted when a guild is no longer unavailable.
+	GuildAvailable Signal[GuildAddEvent]
+	// GuildDelete is emitted when a guild is deleted or the user has left it.
+	GuildDelete Signal[GuildRemoveEvent]
+	// GuildUnavailable is emitted when a guild is unavailable.
+	GuildUnavailable Signal[GuildRemoveEvent]
+	// ChannelCreate is emitted when a channel is created or opened for the user.
+	ChannelCreate Signal[ChannelCreateEvent]
+	// ChannelUpdate is emitted when an individual channel is updated.
+	ChannelUpdate Signal[ChannelUpdateEvent]
+	// ChannelUpdateBulk is emitted when multiple guild channel updates are reported at once.
+	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
+	// ChannelDelete is emitted when a channel is deleted.
+	ChannelDelete Signal[ChannelDeleteEvent]
+	// RoleCreate is emitted when a guild role is created.
+	RoleCreate Signal[RoleCreateEvent]
+	// RoleUpdate is emitted when a guild role is updated.
+	RoleUpdate Signal[RoleUpdateEvent]
+	// RoleUpdateBulk is emitted when multiple guild role updates are reported at once.
+	RoleUpdateBulk Signal[RoleUpdateBulkEvent]
+	// MessageCreate is emitted when a user sends a message.
+	MessageCreate Signal[MessageCreateEvent]
+}
+
+// GuildAddEvent represents a guild becoming available or being joined.
+type GuildAddEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
+}
+
+// GuildRemoveEvent represents a guild becoming unavailable or being left/deleted.
+type GuildRemoveEvent struct {
+	Shard *Shard
+	ID    ID
+	// Cached is the guild that was removed from the cache by this event, if any.
+	Cached *Guild
+}
+
+type ChannelCreateEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
+}
+
+type ChannelUpdateEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
+}
+
+type ChannelUpdateBulkEvent struct {
+	Shard    *Shard    `json:"-"`
+	GuildID  ID        `json:"guild_id"`
+	Channels []Channel `json:"channels"`
+}
+
+type ChannelDeleteEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
+}
+
+type RoleCreateEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"-"`
+	Role
+}
+
+type RoleUpdateEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"-"`
+	Role
+}
+
+type RoleUpdateBulkEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	Roles   []Role `json:"roles"`
+}
+
+type RoleDeleteEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	RoleID  ID     `json:"role_id"`
+	// Cached is the role that was removed from the cache by this event, if any.
+	Cached *Role `json:"-"`
+}
+
+// MessageCreateEvent represents a received message.
+type MessageCreateEvent struct {
+	Shard   *Shard  `json:"-"`
+	Member  *Member `json:"member"`
+	GuildID *ID     `json:"guild_id"`
+	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
+	Nonce *string `json:"nonce"`
+	Message
+}
+
+type shardEvents struct {
+	// PacketReceived is emitted when a packet is received from Fluxer.
+	PacketReceived Signal[ShardPacketEvent]
+	// Ready is emitted when a READY packet is received.
+	// This means the login was successful and contains various information, but no guilds will yet be available on a bot account.
+	Ready Signal[ShardReadyEvent]
+	// Resumed is emitted when a RESUMED packet is received.
+	// This means a session was successfully resumed, but this won't always happen when reconnecting.
+	// If resuming failed, a new session will be started which will cause Ready to be emitted again.
+	Resumed Signal[ShardResumeEvent]
+}
+
+type ShardPacketEvent struct {
+	Shard *Shard `json:"-"`
+	GatewayPacket
+}
+
+type ShardReadyEvent struct {
+	Shard     *Shard       `json:"-"`
+	SessionID string       `json:"session_id"`
+	User      UserPrivate  `json:"user"`
+	Guilds    []ReadyGuild `json:"guilds"`
+}
+
+// ReadyGuild represents a guild in the READY payload which may or may not have its properties available.
+type ReadyGuild struct {
+	Unavailable bool
+	ID          ID
+	// Guild is the full guild if unavailable is false.
+	Guild *Guild
+}
+
+type ShardResumeEvent struct {
+	Shard *Shard
+}
