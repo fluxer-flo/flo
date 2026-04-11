@@ -170,6 +170,7 @@ type GatewayPacket struct {
 }
 
 type Shard struct {
+	// See gateway_events.go
 	shardEvents
 
 	gateway *Gateway
@@ -557,10 +558,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 		GatewayPacket: packet,
 	}
 
-	err := errors.Join(s.PacketReceived.emit(event))
-	if err != nil {
-		slog.Warn("error in PacketReceived handler", slog.Any("err", err))
-	}
+	s.PacketReceived.emit(event)
 
 	if packet.Seq != nil {
 		if *packet.Seq != s.lastSeq+1 {

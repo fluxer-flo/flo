@@ -15,7 +15,7 @@ Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang
 ## See also
 - [FluxerGo](https://github.com/fluxergo/fluxergo) - Port of [DisGo](https://github.com/disgoorg/disgo) to Fluxer (more modular)
 
-## Example (slightly hypothetical)
+## Example
 
 ```go
 token := "Bot " + os.Getenv("FLUXER_TOKEN")
@@ -36,18 +36,30 @@ gateway := flo.Gateway{
     Cache: &cache,
 }
 
-gateway.Ready.Once(func(r flo.ReadyEvent) {
+shard, _ := gateway.Shard(0)
+shard.Ready.OnceSync(func(r flo.ReadyEvent) {
     fmt.Println("ready as " + r.User.Tag())
 })
-gateway.MessageCreate.On(func(m flo.Message) {
+
+gateway.MessageCreate.On(func(m flo.MessageCreateEvent) {
+    var resp string
     if m.Content == "!ping" {
-        rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
-            Content: "pong!"
-        })
+        resp = "Ping!"
     } else if m.Content == "!pong" {
-        rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
-            Content: "ping!"
-        })
+        resp = "Pong!"
+    } else {
+        return
+    }
+
+    err := rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
+        Content: resp,
+        // reply to the original message
+        MessageReference: flo.MessageReferenceOpts{
+            MessageID: m.ID,
+        },
+    })
+    if err != nil {
+        slog.Warn("couldn't reply to command :/", slog.Any("err", err))
     }
 })
 
