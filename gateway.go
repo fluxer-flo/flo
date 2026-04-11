@@ -62,6 +62,8 @@ type Gateway struct {
 	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
 	// ChannelDelete is emitted when a channel is deleted.
 	ChannelDelete Signal[ChannelDeleteEvent]
+	// RoleCreate is emitted when a guild role is created.
+	RoleCreate Signal[RoleCreateEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
@@ -111,6 +113,26 @@ type ChannelUpdateBulkEvent struct {
 type ChannelDeleteEvent struct {
 	Shard *Shard `json:"-"`
 	Channel
+}
+
+type RoleCreateEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"-"`
+	Role
+}
+
+type RoleUpdateEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"-"`
+	Role
+}
+
+type RoleDeleteEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	RoleID  ID     `json:"role_id"`
+	// Cached is the role that was removed from the cache by this event, if any.
+	Cached  *Role  `json:"-"`
 }
 
 // MessageCreateEvent represents a received message.
@@ -993,6 +1015,29 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				}
 			}
 		}
+	case "ROLE_CREATE":
+		var raw struct {
+			GuildID ID   `json:"id"`
+			Role    Role `json:"role"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal ROLE_CREATE data: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(raw.GuildID)
+			if ok {
+				guild.Roles.Set(raw.Role.ID, raw.Role)
+			}
+		}
+
+		event := RoleCreateEvent{
+			Shard:   s,
+			GuildID: raw.GuildID,
+			Role:    raw.Role,
+		}
+		s.gateway.RoleCreate.emit(event)
 	case "MESSAGE_CREATE":
 		event := MessageCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
