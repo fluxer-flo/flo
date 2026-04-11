@@ -13,7 +13,7 @@ func TestIDTimestamp(t *testing.T) {
 		expected := time.UnixMilli(1760476058210)
 
 		if !id.CreatedAt().Equal(expected) {
-			t.Errorf("for ID %d: expected timestamp %v but got %v", id, expected, id.CreatedAt())
+			t.Errorf("for ID %d: expected timestamp %s but got %s", id, expected, id.CreatedAt())
 		}
 	})
 
@@ -22,7 +22,7 @@ func TestIDTimestamp(t *testing.T) {
 		id := flo.NewID(timestamp)
 
 		if !id.CreatedAt().Equal(timestamp) {
-			t.Errorf("for generated ID %d: expected timestamp %v but got %v", id, timestamp, id.CreatedAt())
+			t.Errorf("for generated ID %d: expected timestamp %s but got %s", id, timestamp, id.CreatedAt())
 		}
 	})
 }

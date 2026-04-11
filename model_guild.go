@@ -418,7 +418,7 @@ func (p Perms) String() string {
 }
 
 func (p Perms) MarshalJSON() ([]byte, error) {
-	return fmt.Appendf(nil, `"%v"`, p), nil
+	return fmt.Appendf(nil, `"%s"`, p), nil
 }
 
 func (p *Perms) UnmarshalJSON(data []byte) error {
