@@ -441,18 +441,26 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
 		if errors.Is(err, context.Canceled) {
-			attempts = 1
-			sleepTime = s.sleepTime(attempts)
+			s.stateMu.Lock()
+			reconnect := s.reqReconnect
+			s.stateMu.Unlock()
 
-			slog.Debug(
-				"shard explicitly disconnected while establishing websocket connection; reconnecting in "+sleepTime.String(),
-				slog.Any("shard", s.ID),
-				slog.Bool("reconnect", s.reqReconnect),
-			)
+			if reconnect {
+				attempts = 1
+				sleepTime = s.sleepTime(attempts)
 
-			if s.reqReconnect {
+				slog.Debug(
+					fmt.Sprintf("shard explicitly disconnected while establishing websocket connection; reconnecting in %s", sleepTime),
+					slog.Any("shard", s.ID),
+					slog.Bool("reconnect", reconnect),
+				)
 				continue
 			} else {
+				slog.Debug(
+					"shard explicitly disconnected while establishing websocket connection",
+					slog.Any("shard", s.ID),
+					slog.Bool("reconnect", reconnect),
+				)
 				break
 			}
 		} else if err != nil {
@@ -460,15 +468,14 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			sleepTime = s.sleepTime(attempts)
 
 			slog.Warn(
-				"failed to establish websocket connection; retrying in "+sleepTime.String(),
+				fmt.Sprintf("failed to establish websocket connection; retrying in %s", sleepTime),
 				slog.Any("shard", s.id),
 				slog.Any("err", err),
 			)
 			continue
-		} else {
-			attempts = 1
-			sleepTime = s.sleepTime(attempts)
 		}
+
+		connStartTime := time.Now()
 
 		s.conn = conn
 		s.inbound = make(chan GatewayPacket)
@@ -483,27 +490,59 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		go s.writeLoop()
 
 		err = s.controlLoop(ctx)
-		reconnect := true
+		var reconnect bool
 
 		var closeErr *websocket.CloseError
-		if errors.As(err, &closeErr) {
-			reconnect = shouldReconnectShard(closeErr.Code)
-			if shouldInvalidateSession(closeErr.Code) {
-				s.resetSession()
-			}
-		} else if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) {
+			s.stateMu.Lock()
 			reconnect = s.reqReconnect
-			slog.Debug("shard explicitly disconnected; reconnecting in "+sleepTime.String(), slog.Any("shard", s.ID), slog.Bool("reconnect", reconnect))
-		} else {
+			s.stateMu.Unlock()
+
 			if reconnect {
-				slog.Warn(
-					"error with webhook connection; reconnecting in "+sleepTime.String(),
+				attempts = 1
+				sleepTime = s.sleepTime(attempts)
+
+				slog.Debug(
+					fmt.Sprintf("shard explicitly disconnected; reconnecting in %s", sleepTime),
 					slog.Any("shard", s.ID),
-					slog.Any("err", err),
+					slog.Bool("reconnect", reconnect),
 				)
 			} else {
+				slog.Debug(
+					"shard explicitly disconnected",
+					slog.Any("shard", s.ID),
+					slog.Bool("reconnect", reconnect),
+				)
+			}
+		} else {
+			if time.Since(connStartTime) < 20*time.Second {
+				attempts++
+			} else {
+				attempts = 1
+			}
+			sleepTime = s.sleepTime(attempts)
+
+			if errors.As(err, &closeErr) {
+				reconnect = shouldReconnectShard(closeErr.Code)
+				if shouldInvalidateSession(closeErr.Code) {
+					s.resetSession()
+				}
+
+				if reconnect {
+					slog.Debug(
+						fmt.Sprintf("websocket closed with code %d; reconnecting in %s", closeErr.Code, sleepTime),
+						slog.Any("shard", s.ID),
+					)
+				} else {
+					slog.Debug(
+						fmt.Sprintf("websocket closed with code %d; not reconnecting", closeErr.Code),
+						slog.Any("shard", s.ID),
+					)
+				}
+			} else {
+				reconnect = true
 				slog.Warn(
-					"unrecoverable error with webhook connection; not reconnecting",
+					fmt.Sprintf("error with webhook connection; reconnecting in %s", sleepTime.String()),
 					slog.Any("shard", s.ID),
 					slog.Any("err", err),
 				)
