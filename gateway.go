@@ -132,7 +132,7 @@ type RoleDeleteEvent struct {
 	GuildID ID     `json:"guild_id"`
 	RoleID  ID     `json:"role_id"`
 	// Cached is the role that was removed from the cache by this event, if any.
-	Cached  *Role  `json:"-"`
+	Cached *Role `json:"-"`
 }
 
 // MessageCreateEvent represents a received message.
@@ -551,13 +551,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				}
 
 				if reconnect {
-					slog.Debug(
-						fmt.Sprintf("websocket closed with code %d; reconnecting in %s", closeErr.Code, sleepTime),
+					slog.Warn(
+						fmt.Sprintf("websocket closed with %d %s; reconnecting in %s", closeErr.Code, closeErr.Text, sleepTime),
 						slog.Any("shard", s.ID),
 					)
 				} else {
-					slog.Debug(
-						fmt.Sprintf("websocket closed with code %d; not reconnecting", closeErr.Code),
+					slog.Warn(
+						fmt.Sprintf("websocket closed with %d %s; not reconnecting", closeErr.Code, closeErr.Text),
 						slog.Any("shard", s.ID),
 					)
 				}
