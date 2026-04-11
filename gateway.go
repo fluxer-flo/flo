@@ -872,7 +872,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				})
 			}
 		}
-	case "RESUME":
+	case "RESUMED":
 		s.Resumed.emit(ShardResumeEvent{s})
 	case "GUILD_CREATE":
 		var raw gatewayGuild
