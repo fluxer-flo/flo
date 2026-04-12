@@ -1,5 +1,7 @@
 package flo
 
+import "time"
+
 type gatewayEvents struct {
 	// GuildCreate is emitted when the user has joined a guild.
 	GuildCreate Signal[GuildAddEvent]
@@ -31,6 +33,8 @@ type gatewayEvents struct {
 	GuildEmojisUpdate Signal[GuildEmojisUpdateEvent]
 	// GuildStickersUpdate is emitted when a guild's stickers are modified.
 	GuildStickersUpdate Signal[GuildStickersUpdateEvent]
+	// TypingStart is emitted when a user starts typing in a channel.
+	TypingStart Signal[TypingStartEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 
@@ -122,6 +126,15 @@ type GuildStickersUpdateEvent struct {
 	Shard    *Shard         `json:"-"`
 	GuildID  ID             `json:"guild_id"`
 	Stickers []GuildSticker `json:"stickers"`
+}
+
+type TypingStartEvent struct {
+	Shard     *Shard
+	ChannelID ID
+	UserID    ID
+	Timestamp time.Time
+	GuildID   *ID
+	Member    *Member
 }
 
 // MessageCreateEvent represents a received message.

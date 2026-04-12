@@ -1070,6 +1070,28 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.MessageCreate.emit(event)
+	case "TYPING_START":
+		var raw struct {
+			ChannelID ID      `json:"channel_id"`
+			UserID    ID      `json:"user_id"`
+			Timestamp int64   `json:"timestamp"`
+			GuildID   *ID     `json:"guild_id"`
+			Member    *Member `json:"member"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal TYPING_START data: %w", err)
+		}
+
+		event := TypingStartEvent{
+			Shard:     s,
+			ChannelID: raw.ChannelID,
+			UserID:    raw.UserID,
+			Timestamp: time.UnixMilli(raw.Timestamp),
+			GuildID:   raw.GuildID,
+			Member:    raw.Member,
+		}
+		s.gateway.TypingStart.emit(event)
 	default:
 		slog.Warn("don't know how to handle event " + *packet.Event)
 	}
