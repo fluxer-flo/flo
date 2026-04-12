@@ -333,19 +333,31 @@ type ReactionEmoji struct {
 	Animated bool   `json:"animated"`
 }
 
-func (re *ReactionEmoji) IsUnicode() bool {
-	return re.ID == nil
+// Render creates a string that can be used to display the emoji in chat.
+func (e *ReactionEmoji) Render() string {
+	if unicode, ok := e.UnicodeEmoji(); ok {
+		return unicode
+	} else if !e.Animated {
+		return fmt.Sprintf("<:%s:%d>", e.Name, *e.ID)
+	} else {
+		return fmt.Sprintf("<a:%s:%d>", e.Name, *e.ID)
+	
+	}
 }
 
-func (re *ReactionEmoji) IsCustom() bool {
-	return re.ID != nil
+func (e *ReactionEmoji) IsUnicode() bool {
+	return e.ID == nil
+}
+
+func (e *ReactionEmoji) IsCustom() bool {
+	return e.ID != nil
 }
 
 // UnicodeEmoji returns the emoji string if a unicode emoji was reacted with.
 // Otherwise, the returned bool will be false.
-func (re *ReactionEmoji) UnicodeEmoji() (string, bool) {
-	if re.ID == nil {
-		return re.Name, true
+func (e *ReactionEmoji) UnicodeEmoji() (string, bool) {
+	if e.ID == nil {
+		return e.Name, true
 	} else {
 		return "", false
 	}
@@ -353,9 +365,9 @@ func (re *ReactionEmoji) UnicodeEmoji() (string, bool) {
 
 // CustomEmoji returns the custom emoji ID and name if a custom (non-unicode) emoji was reacted with.
 // Otherwise, the returned bool will be false.
-func (re *ReactionEmoji) CustomEmoji() (ID, string, bool) {
-	if re.ID != nil {
-		return *re.ID, re.Name, true
+func (e *ReactionEmoji) CustomEmoji() (ID, string, bool) {
+	if e.ID != nil {
+		return *e.ID, e.Name, true
 	} else {
 		return 0, "", false
 	}

@@ -26,13 +26,10 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	}
 
 	if r.Cache != nil {
-		hit := r.Cache.Guilds.Update(result.ID, func(guild *Guild) {
-			guild.updateProperties(&result)
-			result = *guild
+		r.Cache.Guilds.Update(result.ID, func(cached *Guild) {
+			cached.updateProperties(&result)
+			result = *cached
 		})
-		if hit {
-			return result, nil
-		}
 	}
 
 	return result, nil

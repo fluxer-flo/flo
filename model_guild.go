@@ -38,8 +38,10 @@ type Guild struct {
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
 	MessageHistoryCutoff  *time.Time                 `json:"message_history_cutoff"`
 
-	Channels *Collection[Channel] `json:"-"`
-	Roles    *Collection[Role]    `json:"-"`
+	Channels *Collection[Channel]      `json:"-"`
+	Roles    *Collection[Role]         `json:"-"`
+	Emojis   *Collection[GuildEmoji]   `json:"-"`
+	Stickers *Collection[GuildSticker] `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {
@@ -55,6 +57,12 @@ func newGuildForCache(id ID, cache *Cache) Guild {
 
 		roles := NewCollectionUnlimited[Role]()
 		result.Roles = &roles
+
+		emojis := NewCollectionUnlimited[GuildEmoji]()
+		result.Emojis = &emojis
+
+		stickers := NewCollectionUnlimited[GuildSticker]()
+		result.Stickers = &stickers
 	} else {
 		if cache.MakeGuild != nil {
 			result = cache.MakeGuild(id)
@@ -67,6 +75,14 @@ func newGuildForCache(id ID, cache *Cache) Guild {
 		if result.Roles == nil {
 			result.Roles = new(Collection[Role])
 		}
+
+		if result.Emojis == nil {
+			result.Emojis = new(Collection[GuildEmoji])
+		}
+
+		if result.Stickers == nil {
+			result.Stickers = new(Collection[GuildSticker])
+		}
 	}
 
 	return result
@@ -75,17 +91,23 @@ func newGuildForCache(id ID, cache *Cache) Guild {
 func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
 	oldRoles := g.Roles
+	oldEmojis := g.Emojis
+	oldStickers := g.Stickers
 
 	*g = *guild
 
 	g.Channels = oldChannels
 	g.Roles = oldRoles
+	g.Emojis = oldEmojis
+	g.Stickers = oldStickers
 }
 
 type gatewayGuild struct {
-	Properties Guild     `json:"properties"`
-	Channels   []Channel `json:"channels"`
-	Roles      []Role    `json:"roles"`
+	Properties Guild          `json:"properties"`
+	Channels   []Channel      `json:"channels"`
+	Roles      []Role         `json:"roles"`
+	Emojis     []GuildEmoji   `json:"emojis"`
+	Stickers   []GuildSticker `json:"stickers"`
 }
 
 func (g *Guild) updateGateway(guild *gatewayGuild) {
@@ -99,6 +121,16 @@ func (g *Guild) updateGateway(guild *gatewayGuild) {
 	g.Roles.Clear()
 	for _, role := range guild.Roles {
 		g.Roles.Set(role.ID, role)
+	}
+
+	g.Emojis.Clear()
+	for _, emoji := range guild.Emojis {
+		g.Emojis.Set(emoji.ID, emoji)
+	}
+
+	g.Stickers.Clear()
+	for _, sticker := range guild.Stickers {
+		g.Stickers.Set(sticker.ID, sticker)
 	}
 }
 
@@ -436,4 +468,43 @@ func (p *Perms) UnmarshalJSON(data []byte) error {
 
 	p.val = result
 	return nil
+}
+
+// GuildEmoji represents a custom emoji in a guild.
+type GuildEmoji struct {
+	ID       ID     `json:"id"`
+	Name     string `json:"name"`
+	Animated bool   `json:"animated"`
+	// User is the user who uploaded the emoji, which may not be available in all responses.
+	User *User `json:"user"`
+}
+
+func (e *GuildEmoji) CreatedAt() time.Time {
+	return e.ID.CreatedAt()
+}
+
+// Render creates a string that can be used to display the emoji in chat.
+func (e *GuildEmoji) Render() string {
+	if !e.Animated {
+		return fmt.Sprintf("<:%s:%d>", e.Name, e.ID)
+	} else {
+		return fmt.Sprintf("<a:%s:%d>", e.Name, e.ID)
+	}
+}
+
+func (e *GuildEmoji) updateWithoutUser(emoji *GuildEmoji) {
+	oldUser := e.User
+	*e = *emoji
+	e.User = oldUser
+}
+
+// GuildSticker reperesents a custom sticker in a guild.
+type GuildSticker struct {
+	ID          ID       `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	Animated    bool     `json:"animated"`
+	// User is the user who uploaded the emoji, which may not be available in all responses.
+	User *User `json:"user"`
 }

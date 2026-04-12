@@ -823,9 +823,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			cache.Guilds.Update(event.Guild.ID, func(guild *Guild) {
-				guild.updateProperties(&event.Guild)
-				event.Guild = *guild
+			cache.Guilds.Update(event.Guild.ID, func(cached *Guild) {
+				cached.updateProperties(&event.Guild)
+				event.Guild = *cached
 			})
 		}
 
@@ -1004,6 +1004,46 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				}
 			}
 		}
+
+		s.gateway.RoleDelete.emit(event)
+	case "GUILD_EMOJIS_UPDATE":
+		event := GuildEmojisUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_EMOJIS_UPDATE: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok {
+				// FIXME: probably should be atomic
+				guild.Emojis.Clear()
+				for _, emoji := range event.Emojis {
+					guild.Emojis.Set(emoji.ID, emoji)
+				}
+			}
+		}
+
+		s.gateway.GuildEmojisUpdate.emit(event)
+	case "GUILD_STICKERS_UPDATE":
+		event := GuildStickersUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_STICKERS_UPDATE: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok {
+				// FIXME: probably should be atomic
+				guild.Stickers.Clear()
+				for _, emoji := range event.Stickers {
+					guild.Stickers.Set(emoji.ID, emoji)
+				}
+			}
+		}
+
+		s.gateway.GuildStickersUpdate.emit(event)
 	case "MESSAGE_CREATE":
 		event := MessageCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
@@ -1021,9 +1061,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			if event.GuildID != nil {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
-					guild.Channels.Update(event.ChannelID, func(val *Channel) {
+					guild.Channels.Update(event.ChannelID, func(cached *Channel) {
 						id := event.Message.ID
-						val.LastMessageID = &id
+						cached.LastMessageID = &id
 					})
 				}
 			}

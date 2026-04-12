@@ -105,7 +105,7 @@ func (c *Collection[T]) removeFromLRU(node *lruNode) {
 	if node.next != nil {
 		node.next.prev = node.prev
 	}
-	
+
 	if c.lru == node {
 		c.lru = node.next
 	}
@@ -130,8 +130,8 @@ func (c *Collection[T]) moveToLRUTail(node *lruNode) {
 	c.lruTail = node
 }
 
-// addToLRUTail creates a new LRU node at the end of the list. This should not be called if limit <= 0.
-func (c *Collection[T]) addToLRUTail(id ID) *lruNode {
+// addToLRUTailAndEvict creates a new LRU node at the end of the list. This should not be called if limit <= 0.
+func (c *Collection[T]) addToLRUTailAndEvict(id ID) *lruNode {
 	if len(c.lookup) > c.limit {
 		panic("collection lookup size went over limit! something is very wrong!")
 	} else if len(c.lookup) == c.limit {
@@ -259,7 +259,7 @@ func (c *Collection[T]) Contains(id ID) bool {
 	return ok
 }
 
-// Set adds or updates the item with the specified ID in the collection. 
+// Set adds or updates the item with the specified ID in the collection.
 // It marks the item as most recently used if a limit is set.
 func (c *Collection[T]) Set(id ID, val T) {
 	if c.limit == 0 {
@@ -283,7 +283,7 @@ func (c *Collection[T]) Set(id ID, val T) {
 
 	entry := &collectionEntry[T]{val: val}
 	if c.limit > 0 {
-		entry.lru = c.addToLRUTail(id)
+		entry.lru = c.addToLRUTailAndEvict(id)
 	}
 
 	c.lookup[id] = entry
@@ -306,6 +306,38 @@ func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 
 	entry, ok := c.lookup[id]
 	if !ok {
+		return false
+	}
+
+	if entry.lru != nil {
+		c.moveToLRUTail(entry.lru)
+	}
+
+	update(&entry.val)
+	return true
+}
+
+// Upsert behaves like Update, but in the case where it returns false i.e. an item was not updated, it is added instead.
+func (c *Collection[T]) Upsert(id ID, val T, update func(val *T)) bool {
+	if c.limit == 0 {
+		return false
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lookup == nil {
+		c.lookup = map[ID]*collectionEntry[T]{}
+	}
+
+	entry, ok := c.lookup[id]
+	if !ok {
+		entry := &collectionEntry[T]{val: val}
+		if c.limit > 0 {
+			entry.lru = c.addToLRUTailAndEvict(id)
+		}
+
+		c.lookup[id] = entry
 		return false
 	}
 

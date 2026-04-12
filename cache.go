@@ -31,9 +31,14 @@ func NewCacheDefault() Cache {
 		MakeGuild: func(id ID) Guild {
 			channels := NewCollectionUnlimited[Channel]()
 			roles := NewCollectionUnlimited[Role]()
+			emojis := NewCollectionUnlimited[GuildEmoji]()
+			stickers := NewCollectionUnlimited[GuildSticker]()
+
 			return Guild{
 				Channels: &channels,
 				Roles:    &roles,
+				Emojis:   &emojis,
+				Stickers: &stickers,
 			}
 		},
 		Users:            NewCollectionUnlimited[User](),
