@@ -29,6 +29,12 @@ type gatewayEvents struct {
 	RoleUpdateBulk Signal[RoleUpdateBulkEvent]
 	// RoleDelete is emitted when a guild role is deleted.
 	RoleDelete Signal[RoleDeleteEvent]
+	// MemberAdd is emitted when a guild member joins.
+	MemberAdd Signal[MemberAddEvent]
+	// MemberUpdate is emitted when a guild member changes.
+	MemberUpdate Signal[MemberUpdateEvent]
+	/// MemberRemove is emitted when a guild member leaves.
+	MemberRemove Signal[MemberRemoveEvent]
 	// GuildEmojisUpdate is emitted when a guild's emojis are modified.
 	GuildEmojisUpdate Signal[GuildEmojisUpdateEvent]
 	// GuildStickersUpdate is emitted when a guild's stickers are modified.
@@ -114,6 +120,25 @@ type RoleDeleteEvent struct {
 	RoleID  ID     `json:"role_id"`
 	// Cached is the role that was removed from the cache by this event, if any.
 	Cached *Role `json:"-"`
+}
+
+type MemberAddEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	Member
+}
+
+type MemberUpdateEvent struct {
+	Shard   *Shard `json:"-"`
+	GuildID ID     `json:"guild_id"`
+	Member
+}
+
+type MemberRemoveEvent struct {
+	Shard    *Shard
+	GuildID  ID
+	MemberID ID
+	Cached   *Member
 }
 
 type GuildEmojisUpdateEvent struct {

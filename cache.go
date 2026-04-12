@@ -12,7 +12,7 @@ type Cache struct {
 	UnavailableGuilds Collection[struct{}]
 	// MakeGuild is used to create new guild entries if it is not nil.
 	// This function should simply return a guild with the [Collection]s set for whatever caching is desired.
-	MakeGuild func(ID) Guild
+	MakeGuild func() Guild
 	// Users is populated by requested users or whatever is available from other gateway/REST paylods.
 	Users Collection[User]
 	// CacheCurrentUser is used to determine whether to cache the [UserPrivate] object for the authenticated user.
@@ -28,15 +28,17 @@ func NewCacheDefault() Cache {
 	return Cache{
 		Guilds:            NewCollectionUnlimited[Guild](),
 		UnavailableGuilds: NewCollectionUnlimited[struct{}](),
-		MakeGuild: func(id ID) Guild {
+		MakeGuild: func() Guild {
 			channels := NewCollectionUnlimited[Channel]()
 			roles := NewCollectionUnlimited[Role]()
+			members := NewCollectionUnlimited[Member]()
 			emojis := NewCollectionUnlimited[GuildEmoji]()
 			stickers := NewCollectionUnlimited[GuildSticker]()
 
 			return Guild{
 				Channels: &channels,
 				Roles:    &roles,
+				Members:  &members,
 				Emojis:   &emojis,
 				Stickers: &stickers,
 			}

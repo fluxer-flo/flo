@@ -40,6 +40,7 @@ type Guild struct {
 
 	Channels *Collection[Channel]      `json:"-"`
 	Roles    *Collection[Role]         `json:"-"`
+	Members  *Collection[Member]       `json:"-"`
 	Emojis   *Collection[GuildEmoji]   `json:"-"`
 	Stickers *Collection[GuildSticker] `json:"-"`
 }
@@ -48,12 +49,15 @@ func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
-func newGuildForCache(id ID, cache *Cache) Guild {
+func newGuildForCache(cache *Cache) Guild {
 	var result Guild
 
 	if cache == nil {
 		channels := NewCollectionUnlimited[Channel]()
 		result.Channels = &channels
+
+		members := NewCollectionUnlimited[Member]()
+		result.Members = &members
 
 		roles := NewCollectionUnlimited[Role]()
 		result.Roles = &roles
@@ -65,11 +69,15 @@ func newGuildForCache(id ID, cache *Cache) Guild {
 		result.Stickers = &stickers
 	} else {
 		if cache.MakeGuild != nil {
-			result = cache.MakeGuild(id)
+			result = cache.MakeGuild()
 		}
 
 		if result.Channels == nil {
 			result.Channels = new(Collection[Channel])
+		}
+
+		if result.Members == nil {
+			result.Members = new(Collection[Member])
 		}
 
 		if result.Roles == nil {
@@ -91,6 +99,7 @@ func newGuildForCache(id ID, cache *Cache) Guild {
 func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
 	oldRoles := g.Roles
+	oldMember := g.Members
 	oldEmojis := g.Emojis
 	oldStickers := g.Stickers
 
@@ -98,6 +107,7 @@ func (g *Guild) updateProperties(guild *Guild) {
 
 	g.Channels = oldChannels
 	g.Roles = oldRoles
+	g.Members = oldMember
 	g.Emojis = oldEmojis
 	g.Stickers = oldStickers
 }
@@ -106,11 +116,12 @@ type gatewayGuild struct {
 	Properties Guild          `json:"properties"`
 	Channels   []Channel      `json:"channels"`
 	Roles      []Role         `json:"roles"`
+	Members    []Member       `json:"members"`
 	Emojis     []GuildEmoji   `json:"emojis"`
 	Stickers   []GuildSticker `json:"stickers"`
 }
 
-func (g *Guild) updateGateway(guild *gatewayGuild) {
+func (g *Guild) updateGateway(guild *gatewayGuild, cache *Cache) {
 	g.updateProperties(&guild.Properties)
 
 	g.Channels.Clear()
@@ -121,6 +132,14 @@ func (g *Guild) updateGateway(guild *gatewayGuild) {
 	g.Roles.Clear()
 	for _, role := range guild.Roles {
 		g.Roles.Set(role.ID, role)
+	}
+
+	g.Members.Clear()
+	for _, member := range guild.Members {
+		g.Members.Set(member.ID(), member)
+		if cache != nil {
+			member.updateCache(cache)
+		}
 	}
 
 	g.Emojis.Clear()
@@ -251,28 +270,29 @@ type Member struct {
 	CommDisabledUntil *time.Time `json:"communication_disabled_until"`
 }
 
+func (m *Member) ID() ID {
+	return m.User.ID
+}
+
 func (m *Member) CreatedAt() time.Time {
-	return m.CreatedAt()
+	return m.User.CreatedAt()
 }
 
 func (m *Member) Mention() string {
 	return m.User.Mention()
 }
 
-// Tag returns a string of Username#Discriminator.
-func (m *Member) Tag() string {
-	return m.Tag()
-}
-
 // DisplayName returns the member's rendered name in chat.
 func (m *Member) DisplayName() string {
 	if m.Nick != nil {
 		return *m.Nick
-	} else if m.User.GlobalName != nil {
-		return *m.User.GlobalName
 	} else {
-		return m.User.Username
+		return m.User.DisplayName()
 	}
+}
+
+func (m *Member) updateCache(cache *Cache) {
+	cache.Users.Set(m.User.ID, m.User)
 }
 
 // Perms respresents a set of member permissions.
