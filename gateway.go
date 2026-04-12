@@ -378,6 +378,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			attempts++
 			sleepTime = s.sleepTime(attempts)
 
+			cancel()
 			slog.Warn(
 				fmt.Sprintf("failed to establish websocket connection; retrying in %s", sleepTime),
 				slog.Any("shard", s.id),
