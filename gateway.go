@@ -815,6 +815,21 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildCreate.emit(event)
+	case "GUILD_UPDATE":
+		event := GuildUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_UPDATE data: %w", err)
+		}
+
+		if cache != nil {
+			cache.Guilds.Update(event.Guild.ID, func(guild *Guild) {
+				guild.updateProperties(&event.Guild)
+				event.Guild = *guild
+			})
+		}
+
+		s.gateway.GuildUpdate.emit(event)
 	case "GUILD_DELETE":
 		var raw struct {
 			ID          ID   `json:"id"`

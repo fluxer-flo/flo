@@ -5,6 +5,8 @@ type gatewayEvents struct {
 	GuildCreate Signal[GuildAddEvent]
 	// GuildAvailable is emitted when a guild is no longer unavailable.
 	GuildAvailable Signal[GuildAddEvent]
+	// GuildUpdate is emitted when a guild is updated.
+	GuildUpdate Signal[GuildUpdateEvent]
 	// GuildDelete is emitted when a guild is deleted or the user has left it.
 	GuildDelete Signal[GuildRemoveEvent]
 	// GuildUnavailable is emitted when a guild is unavailable.
@@ -38,6 +40,13 @@ type gatewayEvents struct {
 
 // GuildAddEvent represents a guild becoming available or being joined.
 type GuildAddEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
+}
+
+// GuildUpdateEvent represents a guild being updated.
+// The guild collections will only be present if the guild was already cached.
+type GuildUpdateEvent struct {
 	Shard *Shard `json:"-"`
 	Guild
 }
