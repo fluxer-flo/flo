@@ -220,6 +220,8 @@ var (
 	ErrShardAlreadyDisconnecting = errors.New("shard already disconnecting")
 )
 
+// Connect starts the shard on a new gorountine.
+// After this, calls will return [ErrShardAlreadyRunning] until Disconnect(false) is called and the disconnection completes.
 func (s *Shard) Connect() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
@@ -237,6 +239,9 @@ func (s *Shard) Connect() error {
 	return nil
 }
 
+// Disconnect signals for the shard to be disconnected.
+// If reconnect is true, it will try to reconnect again after disconnnecting.
+// If there is already a pending disconnect, this will return [ErrShardAlreadyDisconnecting].
 func (s *Shard) Disconnect(reconnect bool) error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
@@ -455,6 +460,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			}
 		}
 
+		event := ShardDisconnectEvent{
+			Err:          err,
+			Reconnecting: reconnect,
+		}
+		s.Disconnected.emit(event)
+		s.gateway.ShardDisconnected.emit(event)
+
 		err = s.conn.Close()
 		if err != nil {
 			slog.Warn(
@@ -559,6 +571,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 	}
 
 	s.PacketReceived.emit(event)
+	s.gateway.ShardPacketReceived.emit(event)
 
 	if packet.Seq != nil {
 		if *packet.Seq != s.lastSeq+1 {
@@ -753,6 +766,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.Ready.emit(event)
+		s.gateway.ShardReady.emit(event)
 
 		for _, guild := range event.Guilds {
 			if guild.Unavailable {
@@ -777,6 +791,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 	case "RESUMED":
 		s.Resumed.emit(ShardResumeEvent{s})
+		s.gateway.ShardResumed.emit(ShardResumeEvent{s})
 	case "GUILD_CREATE":
 		var raw gatewayGuild
 		err := json.Unmarshal(packet.Data, &raw)

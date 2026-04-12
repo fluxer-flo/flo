@@ -25,6 +25,15 @@ type gatewayEvents struct {
 	RoleUpdateBulk Signal[RoleUpdateBulkEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
+
+	// See [Shard.PacketReceived].
+	ShardPacketReceived Signal[ShardPacketEvent]
+	// See [Shard.Ready].
+	ShardReady Signal[ShardReadyEvent]
+	// See [Shard.Resumed].
+	ShardResumed Signal[ShardResumeEvent]
+	// See [Shard.Disconnected].
+	ShardDisconnected Signal[ShardDisconnectEvent]
 }
 
 // GuildAddEvent represents a guild becoming available or being joined.
@@ -108,6 +117,8 @@ type shardEvents struct {
 	// This means a session was successfully resumed, but this won't always happen when reconnecting.
 	// If resuming failed, a new session will be started which will cause Ready to be emitted again.
 	Resumed Signal[ShardResumeEvent]
+	// Disconnected is emitted when a websocket session ends.
+	Disconnected Signal[ShardDisconnectEvent]
 }
 
 type ShardPacketEvent struct {
@@ -132,4 +143,11 @@ type ReadyGuild struct {
 
 type ShardResumeEvent struct {
 	Shard *Shard
+}
+
+type ShardDisconnectEvent struct {
+	Shard *Shard
+	Err   error
+	// Reconnecting is true if the shard will try to reconnect.
+	Reconnecting bool
 }
