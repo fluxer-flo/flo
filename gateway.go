@@ -817,10 +817,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		s.gateway.GuildCreate.emit(event)
 	case "GUILD_UPDATE":
-		event := GuildUpdateEvent{
-			Shard: s,
-			Guild: newGuildForCache(cache),
-		}
+		event := GuildUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal GUILD_UPDATE data: %w", err)
@@ -1042,8 +1039,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		s.gateway.MemberUpdate.emit(event)
 	case "GUILD_MEMBER_REMOVE":
 		var raw struct {
-			GuildID ID`json:"guild_id"`
-			User struct {
+			GuildID ID `json:"guild_id"`
+			User    struct {
 				ID ID `json:"id"`
 			}
 		}
@@ -1053,11 +1050,11 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		event := MemberRemoveEvent{
-			Shard: s,
-			GuildID: raw.GuildID,
+			Shard:    s,
+			GuildID:  raw.GuildID,
 			MemberID: raw.User.ID,
 		}
-		
+
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(raw.GuildID)
 			if ok && guild.Members != nil {
