@@ -86,6 +86,34 @@ const (
 	ChannelTypePersonalNotes ChannelType = 999
 )
 
+var guildChannelTypes = [...]bool{
+	ChannelTypeGuildText:     true,
+	ChannelTypeDM:            false,
+	ChannelTypeGuildVoice:    true,
+	ChannelTypeGroupDM:       false,
+	ChannelTypeGuildCategory: true,
+	ChannelTypeGuildLink:     true,
+	ChannelTypePersonalNotes: false,
+}
+
+func (c ChannelType) IsGuild() bool {
+	return c < ChannelType(len(guildChannelTypes)) && guildChannelTypes[c]
+}
+
+var privateChannelTypes = [...]bool{
+	ChannelTypeGuildText:     false,
+	ChannelTypeDM:            true,
+	ChannelTypeGuildVoice:    false,
+	ChannelTypeGroupDM:       true,
+	ChannelTypeGuildCategory: false,
+	ChannelTypeGuildLink:     false,
+	ChannelTypePersonalNotes: true,
+}
+
+func (c ChannelType) IsPrivate() bool {
+	return c < ChannelType(len(privateChannelTypes)) && privateChannelTypes[c]
+}
+
 var textableChannelTypes = [...]bool{
 	ChannelTypeGuildText:     true,
 	ChannelTypeDM:            true,

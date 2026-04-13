@@ -5,6 +5,8 @@ import "sync"
 // Cache specifies caching targets and configuration.
 // The zero value for Cache does not cache anything - use [NewCacheDefault] for generous defaults.
 type Cache struct {
+	// PrivateChannels is populated by non-guild private channels.
+	PrivateChannels Collection[Channel]
 	// MakeChannel is used to create new channel entries if it is not nil.
 	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
 	MakeChannel func() Channel

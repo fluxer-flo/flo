@@ -806,6 +806,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				if ok && guild.Channels != nil {
 					guild.Channels.Set(event.ID, event.Channel)
 				}
+			} else if event.Type.IsPrivate() {
+				cache.PrivateChannels.Set(event.ID, event.Channel)
 			}
 		}
 
@@ -823,6 +825,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				if ok && guild.Channels != nil {
 					guild.Channels.Set(event.ID, event.Channel)
 				}
+			} else if event.Type.IsPrivate() {
+				cache.PrivateChannels.Set(event.ID, event.Channel)
 			}
 		}
 
@@ -852,11 +856,13 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			if event.Channel.GuildID != nil {
+			if event.GuildID != nil {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
 					guild.Channels.Delete(event.ID)
 				}
+			} else if event.Type.IsPrivate() {
+				cache.PrivateChannels.Delete(event.ID)
 			}
 		}
 	case "MESSAGE_CREATE":
