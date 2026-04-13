@@ -320,8 +320,6 @@ func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 		return nil, "", fmt.Errorf("failed to end form: %w", err)
 	}
 
-	fmt.Println(buf.String())
-
 	contentType := mime.FormatMediaType("multipart/form-data", map[string]string{
 		"boundary": form.Boundary(),
 	})
