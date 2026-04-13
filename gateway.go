@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"math/big"
 	"net/http"
 	"net/url"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -47,8 +49,9 @@ type Gateway struct {
 	// See gateway_events.go.
 	gatewayEvents
 
-	shardsMu sync.RWMutex
-	shards   []*Shard
+	shardsMu      sync.RWMutex
+	shards        []*Shard
+	runningShards atomic.Uint64
 }
 
 var defaultGatewayURL = func() *url.URL {
@@ -106,6 +109,11 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 	}
 
 	return shards[id-g.FirstShard], true
+}
+
+// RunningShards returns the count of shards that are running.
+func (g *Gateway) RunningShards() uint {
+	return uint(g.runningShards.Load())
 }
 
 // Start attemps to starts all shards.
@@ -341,6 +349,8 @@ func (s *Shard) resetSession() {
 }
 
 func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
+	s.gateway.runningShards.Add(1)
+
 	s.Started.emit(ShardStartedEvent{s})
 	s.gateway.ShardStarted.emit(ShardStartedEvent{s})
 
@@ -356,6 +366,11 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		s.Stopped.emit(ShardStoppedEvent{s})
 		s.gateway.ShardStopped.emit(ShardStoppedEvent{s})
+
+		newRunning := s.gateway.runningShards.Add(math.MaxUint64) // -1
+		if newRunning == 0 {
+			s.gateway.AllShardsStopped.emit(AllShardsStoppedEvent{s.gateway})
+		}
 	}()
 
 	for {

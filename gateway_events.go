@@ -64,6 +64,8 @@ type gatewayEvents struct {
 	ShardStarted Signal[ShardStartedEvent]
 	// See [Shard.Stopped].
 	ShardStopped Signal[ShardStoppedEvent]
+	// AllShardsStopped is emitted when there are no remaining running shards.
+	AllShardsStopped Signal[AllShardsStoppedEvent]
 }
 
 type ChannelCreateEvent struct {
@@ -205,6 +207,10 @@ type GuildStickersUpdateEvent struct {
 type UserUpdateEvent struct {
 	Shard *Shard `json:"-"`
 	UserPrivate
+}
+
+type AllShardsStoppedEvent struct {
+	Gateway *Gateway
 }
 
 type shardEvents struct {
