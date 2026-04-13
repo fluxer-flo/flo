@@ -48,6 +48,24 @@ func (s *Signal[T]) OnceSync(f func(T)) SignalListener[T] {
 	return s.on(f, true)
 }
 
+func (s *Signal[T]) Chan() (<-chan T, SignalListener[T]) {
+	ch := make(chan T)
+	return ch, s.On(func(t T) {
+		go func() {
+			ch <- t
+		}()
+	})
+}
+
+func (s *Signal[T]) OnceChan() (chan T, SignalListener[T]) {
+	result := make(chan T)
+	return result, s.Once(func(t T) {
+		go func() {
+			<-result
+		}()
+	})
+}
+
 // SignalListener is a handle for an added listener which can be used to remove it.
 type SignalListener[T any] struct {
 	signal  *Signal[T]

@@ -356,6 +356,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 	var attempts uint
 	var sleepTime time.Duration
+	var stopErr error
 
 	defer func() {
 		cancel()
@@ -364,8 +365,8 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		s.running = false
 		s.stateMu.Unlock()
 
-		s.Stopped.emit(ShardStoppedEvent{s})
-		s.gateway.ShardStopped.emit(ShardStoppedEvent{s})
+		s.Stopped.emit(ShardStoppedEvent{s, stopErr})
+		s.gateway.ShardStopped.emit(ShardStoppedEvent{s, stopErr})
 
 		newRunning := s.gateway.runningShards.Add(math.MaxUint64) // -1
 		if newRunning == 0 {
@@ -379,17 +380,22 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 			select {
 			case <-ctx.Done():
-				slog.Debug(
-					"shard explicitly disconnected before connect",
-					slog.Any("shard", s.ID),
-					slog.Bool("reconnect", s.reqReconnect),
-				)
 
 				s.stateMu.Lock()
 				reconnect = s.reqReconnect
 				if reconnect {
+					slog.Debug(
+						"shard explicitly reconnected before connect",
+						slog.Any("shard", s.ID),
+					)
+
 					ctx, cancel = context.WithCancel(context.Background())
 					s.reqDisconnect = cancel
+				} else {
+					slog.Debug(
+						"shard explicitly stopped before connect",
+						slog.Any("shard", s.ID),
+					)
 				}
 				s.stateMu.Unlock()
 			case <-time.After(sleepTime):
@@ -433,16 +439,14 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				sleepTime = s.sleepTime(attempts)
 
 				slog.Debug(
-					fmt.Sprintf("shard explicitly disconnected while establishing websocket connection; reconnecting in %s", sleepTime),
+					fmt.Sprintf("shard explicitly reconnected while establishing websocket connection; reconnecting in %s", sleepTime),
 					slog.Any("shard", s.ID),
-					slog.Bool("reconnect", reconnect),
 				)
 				continue
 			} else {
 				slog.Debug(
-					"shard explicitly disconnected while establishing websocket connection",
+					"shard explicitly stopped while establishing websocket connection",
 					slog.Any("shard", s.ID),
-					slog.Bool("reconnect", reconnect),
 				)
 				break
 			}
@@ -476,11 +480,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		go s.readLoop()
 		go s.writeLoop()
 
-		err = s.controlLoop(ctx)
+		disconnectErr := s.controlLoop(ctx)
 		var reconnect bool
 
 		var closeErr *websocket.CloseError
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(disconnectErr, context.Canceled) {
+			disconnectErr = nil
+
 			s.stateMu.Lock()
 			reconnect = s.reqReconnect
 			if reconnect {
@@ -513,7 +519,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			}
 			sleepTime = s.sleepTime(attempts)
 
-			if errors.As(err, &closeErr) {
+			if errors.As(disconnectErr, &closeErr) {
 				reconnect = shouldReconnectShard(closeErr.Code)
 				if shouldInvalidateSession(closeErr.Code) {
 					s.resetSession()
@@ -535,13 +541,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				slog.Warn(
 					fmt.Sprintf("error with webhook connection; reconnecting in %s", sleepTime.String()),
 					slog.Any("shard", s.ID),
-					slog.Any("err", err),
+					slog.Any("err", disconnectErr),
 				)
 			}
 		}
 
 		event := ShardDisconnectedEvent{
-			Err:          err,
+			Err:          disconnectErr,
 			Reconnecting: reconnect,
 		}
 		s.Disconnected.emit(event)
@@ -557,6 +563,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		}
 
 		if !reconnect {
+			stopErr = disconnectErr
 			break
 		}
 	}

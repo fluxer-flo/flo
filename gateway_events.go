@@ -274,4 +274,5 @@ type ShardStartedEvent struct {
 
 type ShardStoppedEvent struct {
 	Shard *Shard
+	Err   error
 }

@@ -18,7 +18,13 @@ Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang
 ## Example
 
 ```go
-token := "Bot " + os.Getenv("FLUXER_TOKEN")
+token := os.Getenv("FLUXER_TOKEN")
+if token == "" {
+    slog.Error("please provide the token as FLUXER_TOKEN")
+    os.Exit(1)
+}
+// you need this prefix for bot tokens!
+token = "Bot " + token
 
 cache := flo.NewCacheDefault()
 // if you want to change the limit or avoid caching something entirely:
@@ -36,8 +42,7 @@ gateway := flo.Gateway{
     Cache: &cache,
 }
 
-shard, _ := gateway.Shard(0)
-shard.Ready.OnceSync(func(r flo.ReadyEvent) {
+gateway.ShardReady.OnceSync(func(r flo.ReadyEvent) {
     fmt.Println("ready as " + r.User.Tag())
 })
 
@@ -51,7 +56,7 @@ gateway.MessageCreate.On(func(m flo.MessageCreateEvent) {
         return
     }
 
-    err := rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
+    _, err := rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
         Content: resp,
         // reply to the original message
         MessageReference: flo.MessageReferenceOpts{
@@ -63,10 +68,11 @@ gateway.MessageCreate.On(func(m flo.MessageCreateEvent) {
     }
 })
 
-err := gateway.Connect()
+gateway.Connect()
 
-s := make(chan os.Signal, 1)
-os.Notify(s, syscall.SIGINT, syscall.SIGTERM)
-
-<-s
+stopped, _ := gateway.ShardStopped.OnceChan()
+event := <-stopped
+if event.Err != nil {
+    slog.Error("stopped with error", slog.Any("err", event.Err))
+}
 ```
