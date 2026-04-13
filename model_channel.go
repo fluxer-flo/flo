@@ -52,6 +52,8 @@ type Channel struct {
 	RateLimitSecs int `json:"rate_limit_per_user"`
 	// Nicks contains custom nicknames for users inside the channel if the type is [ChannelTypeGroupDM].
 	Nicks map[ID]string `json:"nicks"`
+
+	Messages *Collection[Message]
 }
 
 func (c *Channel) CreatedAt() time.Time {

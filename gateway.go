@@ -1117,25 +1117,83 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		if cache != nil {
 			event.Message.updateCache(cache)
 
+			updateChannel := func(cached *Channel) {
+				lastMessageID := event.Message.ID
+				cached.LastMessageID = &lastMessageID
+
+				if cached.Messages != nil {
+					cached.Messages.Set(event.Message.ID, event.Message)
+				}
+			}
+
 			if event.GuildID != nil {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
-					guild.Channels.Update(event.ChannelID, func(cached *Channel) {
-						id := event.Message.ID
-						cached.LastMessageID = &id
-					})
+					guild.Channels.Update(event.ChannelID, updateChannel)
 				}
 				if ok && event.Member != nil && guild.Members != nil {
 					guild.Members.Set(event.Member.ID(), *event.Member)
 				}
 			}
-
-			if event.Member != nil {
-				event.Member.updateCache(cache)
-			}
 		}
 
 		s.gateway.MessageCreate.emit(event)
+	case "MESSAGE_UPDATE":
+		event := MessageUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data")
+		}
+
+		// FIXME: horrendous levels of indentation
+		if cache != nil {
+			event.Message.updateCache(cache)
+
+			if event.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.GuildID)
+				if ok {
+					if guild.Channels != nil {
+						if channel, ok := guild.Channels.Get(event.ChannelID); ok {
+							if channel.Messages != nil {
+								channel.Messages.Set(event.Message.ID, event.Message)
+							}
+						}
+					}
+					if event.Member != nil && guild.Members != nil {
+						guild.Members.Set(event.Member.ID(), *event.Member)
+					}
+				}
+			}
+		}
+
+		s.gateway.MessageUpdate.emit(event)
+	case "MESSAGE_DELETE":
+		event := MessageDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE payload: %w", err)
+		}
+
+		// FIXME: horrendous levels of indentation
+		if cache != nil && event.GuildID != nil {
+			guild, ok := cache.Guilds.Get(*event.GuildID)
+			if ok {
+				if guild.Channels != nil {
+					if channel, ok := guild.Channels.Get(event.ChannelID); ok {
+						if channel.Messages != nil {
+							if cached, ok := channel.Messages.Delete(event.MessageID); ok {
+								event.Cached = cached
+							}
+						}
+					}
+				}
+				if event.Member != nil && guild.Members != nil {
+					guild.Members.Set(event.Member.ID(), *event.Member)
+				}
+			}
+		}
+
+		s.gateway.MessageDelete.emit(event)
 	case "TYPING_START":
 		var raw struct {
 			ChannelID ID      `json:"channel_id"`

@@ -43,6 +43,10 @@ type gatewayEvents struct {
 	TypingStart Signal[TypingStartEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
+	// MessageUpdate is emitted when a message is updated (not necessarily a user edit).
+	MessageUpdate Signal[MessageUpdateEvent]
+	// MessageDelete is emitted when a message is deleted.
+	MessageDelete Signal[MessageDeleteEvent]
 
 	// See [Shard.PacketReceived].
 	ShardPacketReceived Signal[ShardPacketEvent]
@@ -170,6 +174,24 @@ type MessageCreateEvent struct {
 	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
 	Nonce *string `json:"nonce"`
 	Message
+}
+
+type MessageUpdateEvent struct {
+	Shard   *Shard  `json:"-"`
+	Member  *Member `json:"member"`
+	GuildID *ID     `json:"guild_id"`
+	Message
+}
+
+type MessageDeleteEvent struct {
+	Shard     *Shard   `json:"-"`
+	GuildID   *ID      `json:"guild_id"`
+	ChannelID ID       `json:"channel_id"`
+	MessageID ID       `json:"id"`
+	Content   *string  `json:"content"`
+	AuthorID  *ID      `json:"author_id"`
+	Member    *Member  `json:"member"`
+	Cached    *Message `json:"-"`
 }
 
 type shardEvents struct {
