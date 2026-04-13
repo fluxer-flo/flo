@@ -1074,7 +1074,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(event.GuildID)
-			if ok {
+			if ok && guild.Emojis != nil {
 				// FIXME: probably should be atomic
 				guild.Emojis.Clear()
 				for _, emoji := range event.Emojis {
@@ -1093,7 +1093,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(event.GuildID)
-			if ok {
+			if ok && guild.Stickers != nil {
 				// FIXME: probably should be atomic
 				guild.Stickers.Clear()
 				for _, emoji := range event.Stickers {
@@ -1128,11 +1128,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 			if event.GuildID != nil {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
-				if ok && guild.Channels != nil {
-					guild.Channels.Update(event.ChannelID, updateChannel)
-				}
-				if ok && event.Member != nil && guild.Members != nil {
-					guild.Members.Set(event.Member.ID(), *event.Member)
+				if ok {
+					guild.Channels.optUpdate(event.ChannelID, updateChannel)
+					guild.Members.optSet(event.Member.ID(), *event.Member)
 				}
 			}
 		}
@@ -1145,19 +1143,14 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data")
 		}
 
-		// FIXME: horrendous levels of indentation
 		if cache != nil {
 			event.Message.updateCache(cache)
 
 			if event.GuildID != nil {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok {
-					if guild.Channels != nil {
-						if channel, ok := guild.Channels.Get(event.ChannelID); ok {
-							if channel.Messages != nil {
-								channel.Messages.Set(event.Message.ID, event.Message)
-							}
-						}
+					if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
+						channel.Messages.optSet(event.Message.ID, event.Message)
 					}
 					if event.Member != nil && guild.Members != nil {
 						guild.Members.Set(event.Member.ID(), *event.Member)
@@ -1174,17 +1167,12 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE payload: %w", err)
 		}
 
-		// FIXME: horrendous levels of indentation
 		if cache != nil && event.GuildID != nil {
 			guild, ok := cache.Guilds.Get(*event.GuildID)
 			if ok {
-				if guild.Channels != nil {
-					if channel, ok := guild.Channels.Get(event.ChannelID); ok {
-						if channel.Messages != nil {
-							if cached, ok := channel.Messages.Delete(event.MessageID); ok {
-								event.Cached = cached
-							}
-						}
+				if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
+					if cached, ok := channel.Messages.optDelete(event.MessageID); ok {
+						event.Cached = cached
 					}
 				}
 				if event.Member != nil && guild.Members != nil {
