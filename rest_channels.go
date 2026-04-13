@@ -55,14 +55,16 @@ type EmbedFooterOpts struct {
 
 // CreateAttachmentOpts specifies an attachment when creating a message.
 type CreateAttachmentOpts struct {
-	// ID is the placeholder ID used for the attachment.
-	// An actual [ID] will be generated when sending the message.
+	// ID is the fake ID used for the attachment in the request.
+	// If left as 0, ascending numbers will be used.
+	// An actual [ID] will be generated in the response.
 	ID          uint            `json:"id"`
 	Filename    string          `json:"filename"`
 	Title       string          `json:"title,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Flags       AttachmentFlags `json:"flags,omitzero"`
-	Content     io.ReadCloser   `json:"-"`
+	// Content is used to provide attachment data. It should not be nil.
+	Content io.ReadCloser `json:"-"`
 	// TODO: waveform?
 }
 
@@ -74,14 +76,6 @@ type AllowedMentions struct {
 	RepliedUser *bool                  `json:"replied_user,omitempty"`
 }
 
-// MessageReferenceOpts specifies a message reference (reply or forward) when sending or editing a message.
-type MessageReferenceOpts struct {
-	MessageID ID                   `json:"message_id"`
-	ChannelID ID                   `json:"channel_id,omitzero"`
-	GuildID   ID                   `json:"guild_id,omitzero"`
-	Type      MessageReferenceType `json:"type"`
-}
-
 type AllowedMentionsParse string
 
 const (
@@ -89,6 +83,14 @@ const (
 	AllowedMentionsParseRoles    AllowedMentionsParse = "roles"
 	AllowedMentionsParseEveryone AllowedMentionsParse = "everyone"
 )
+
+// MessageReferenceOpts specifies a message reference (reply or forward) when sending or editing a message.
+type MessageReferenceOpts struct {
+	MessageID ID                   `json:"message_id"`
+	ChannelID ID                   `json:"channel_id,omitzero"`
+	GuildID   ID                   `json:"guild_id,omitzero"`
+	Type      MessageReferenceType `json:"type"`
+}
 
 func rateLimitCreateMessage(channelID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
@@ -117,7 +119,7 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 
 			files = append(files, RESTFormField{
 				FieldName: fmt.Sprintf("files[%d]", id),
-				FileName: "-",
+				FileName:  "-",
 				Content:   attachment.Content,
 			})
 		}
@@ -140,6 +142,74 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 	}
 
 	return resp, nil
+}
+
+// EditMessageOpts specifies message fields to edit.
+// A field being left as nil indicates to keep it the same.
+type EditMessageOpts struct {
+	Content         *string              `json:"content,omitempty"`
+	Embeds          []Embed              `json:"embeds,omitzero"`
+	AllowedMentions *AllowedMentions     `json:"allowed_mentions,omitempty"`
+	Attachments     []EditAttachmentOpts `json:"attachments,omitzero"`
+	Flags           *MessageFlags        `json:"flags,omitempty"`
+}
+
+// EditAttachmentOpts specifies a possibly preexisting attachment when editing a message.
+type EditAttachmentOpts struct {
+	// ID is the ID of an existing attachment to keep or a fake ID for a new attachment.
+	// If left as 0 ascending numbers will be be used in the request - you probably want to do this for new attachments.
+	// An actual [ID] will be generated for new attachments in the response.
+	ID       ID     `json:"id"`
+	Filename string `json:"filename"`
+	// Content is used to provide attachment data. It should be nil for existing attachments but not for new ones.
+	Content io.ReadCloser `json:"-"`
+}
+
+func (r *REST) EditMessage(ctx context.Context, channelID ID, messageID ID, opts EditMessageOpts) (Message, error) {
+	if opts.AllowedMentions == nil {
+		opts.AllowedMentions = r.DefaultAllowedMentions
+	}
+
+	var files []RESTFormField
+	if len(opts.Attachments) != 0 {
+		files = make([]RESTFormField, 0, len(opts.Attachments))
+
+		var id ID
+		for i := range opts.Attachments {
+			attachment := &opts.Attachments[i]
+			if attachment.ID == 0 {
+				id++
+				attachment.ID = id
+			}
+
+			if attachment.Content != nil {
+				files = append(files, RESTFormField{
+					FieldName: fmt.Sprintf("files[%d]", id),
+					FileName:  "-",
+					Content:   attachment.Content,
+				})
+			}
+		}
+	}
+
+	var resp Message
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "PATCH",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		RateLimit: rateLimitCreateMessage(channelID),
+		Payload:   opts,
+		Form:      files,
+	}, &resp)
+	if err != nil {
+		return Message{}, err
+	}
+
+	if r.Cache != nil {
+		resp.updateCache(r.Cache)
+	}
+
+	return resp, nil
+
 }
 
 func rateLimitDeleteMessage(channelID ID) RESTRateLimitConfig {

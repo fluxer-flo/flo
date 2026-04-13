@@ -169,6 +169,16 @@ func (m *Message) IsDeletable() bool {
 	return m.Type.IsDeletable()
 }
 
+func (m *Message) Edit(rest *REST, ctx context.Context, opts EditMessageOpts) error {
+	msg, err := rest.EditMessage(ctx, m.ChannelID, m.ID, opts)
+	if err != nil {
+		return err
+	}
+
+	*m = msg
+	return nil
+}
+
 func (m *Message) Delete(rest *REST, ctx context.Context) error {
 	return rest.DeleteMessage(ctx, m.ChannelID, m.ID)
 }
@@ -343,7 +353,7 @@ func (e *ReactionEmoji) Render() string {
 		return fmt.Sprintf("<:%s:%d>", e.Name, *e.ID)
 	} else {
 		return fmt.Sprintf("<a:%s:%d>", e.Name, *e.ID)
-	
+
 	}
 }
 
