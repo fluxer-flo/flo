@@ -802,7 +802,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		if cache != nil {
 			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
 					guild.Channels.Set(event.ID, event.Channel)
 				}
@@ -818,8 +818,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+			if event.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
 					guild.Channels.Set(event.ID, event.Channel)
 				}
@@ -853,9 +853,9 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		if cache != nil {
 			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok && guild.Channels != nil {
-					guild.Channels.Delete(event.Channel.ID)
+					guild.Channels.Delete(event.ID)
 				}
 			}
 		}
@@ -867,18 +867,18 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if event.Member != nil {
-			event.Member.User = event.Message.Author
+			event.Member.User = event.Author
 		}
 
 		if cache != nil {
-			event.Message.updateCache(cache)
+			event.updateCache(cache)
 
 			updateChannel := func(cached *Channel) {
-				lastMessageID := event.Message.ID
+				lastMessageID := event.ID
 				cached.LastMessageID = &lastMessageID
 
 				if cached.Messages != nil {
-					cached.Messages.Set(event.Message.ID, event.Message)
+					cached.Messages.Set(event.ID, event.Message)
 				}
 			}
 
@@ -906,7 +906,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 				guild, ok := cache.Guilds.Get(*event.GuildID)
 				if ok {
 					if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
-						channel.Messages.optSet(event.Message.ID, event.Message)
+						channel.Messages.optSet(event.ID, event.Message)
 					}
 					if event.Member != nil && guild.Members != nil {
 						guild.Members.Set(event.Member.ID(), *event.Member)
@@ -973,10 +973,10 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			Shard: s,
 			Guild: newGuildForCache(cache),
 		}
-		event.Guild.updateGateway(&raw, cache)
+		event.updateGateway(&raw, cache)
 
 		if cache != nil {
-			cache.Guilds.Set(event.Guild.ID, event.Guild)
+			cache.Guilds.Set(event.ID, event.Guild)
 
 			if _, ok := cache.UnavailableGuilds.Delete(raw.Properties.ID); ok {
 				s.gateway.GuildAvailable.emit(event)
@@ -993,7 +993,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			cache.Guilds.Update(event.Guild.ID, func(cached *Guild) {
+			cache.Guilds.Update(event.ID, func(cached *Guild) {
 				cached.updateProperties(&event.Guild)
 				event.Guild = *cached
 			})
@@ -1120,7 +1120,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(event.GuildID)
 			if ok && guild.Members != nil {
-				guild.Members.Set(event.Member.ID(), event.Member)
+				guild.Members.Set(event.ID(), event.Member)
 			}
 		}
 
@@ -1135,7 +1135,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(event.GuildID)
 			if ok && guild.Members != nil {
-				guild.Members.Set(event.Member.ID(), event.Member)
+				guild.Members.Set(event.ID(), event.Member)
 			}
 		}
 
