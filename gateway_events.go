@@ -3,6 +3,22 @@ package flo
 import "time"
 
 type gatewayEvents struct {
+	// ChannelCreate is emitted when a channel is created or opened for the user.
+	ChannelCreate Signal[ChannelCreateEvent]
+	// ChannelUpdate is emitted when an individual channel is updated.
+	ChannelUpdate Signal[ChannelUpdateEvent]
+	// ChannelUpdateBulk is emitted when multiple guild channel updates are reported at once.
+	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
+	// ChannelDelete is emitted when a channel is deleted.
+	ChannelDelete Signal[ChannelDeleteEvent]
+	// MessageCreate is emitted when a user sends a message.
+	MessageCreate Signal[MessageCreateEvent]
+	// MessageUpdate is emitted when a message is updated (not necessarily a user edit).
+	MessageUpdate Signal[MessageUpdateEvent]
+	// MessageDelete is emitted when a message is deleted.
+	MessageDelete Signal[MessageDeleteEvent]
+	// TypingStart is emitted when a user starts typing in a channel.
+	TypingStart Signal[TypingStartEvent]
 	// GuildCreate is emitted when the user has joined a guild.
 	GuildCreate Signal[GuildAddEvent]
 	// GuildAvailable is emitted when a guild is no longer unavailable.
@@ -13,14 +29,6 @@ type gatewayEvents struct {
 	GuildDelete Signal[GuildRemoveEvent]
 	// GuildUnavailable is emitted when a guild is unavailable.
 	GuildUnavailable Signal[GuildRemoveEvent]
-	// ChannelCreate is emitted when a channel is created or opened for the user.
-	ChannelCreate Signal[ChannelCreateEvent]
-	// ChannelUpdate is emitted when an individual channel is updated.
-	ChannelUpdate Signal[ChannelUpdateEvent]
-	// ChannelUpdateBulk is emitted when multiple guild channel updates are reported at once.
-	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
-	// ChannelDelete is emitted when a channel is deleted.
-	ChannelDelete Signal[ChannelDeleteEvent]
 	// RoleCreate is emitted when a guild role is created.
 	RoleCreate Signal[RoleCreateEvent]
 	// RoleUpdate is emitted when a guild role is updated.
@@ -39,14 +47,6 @@ type gatewayEvents struct {
 	GuildEmojisUpdate Signal[GuildEmojisUpdateEvent]
 	// GuildStickersUpdate is emitted when a guild's stickers are modified.
 	GuildStickersUpdate Signal[GuildStickersUpdateEvent]
-	// TypingStart is emitted when a user starts typing in a channel.
-	TypingStart Signal[TypingStartEvent]
-	// MessageCreate is emitted when a user sends a message.
-	MessageCreate Signal[MessageCreateEvent]
-	// MessageUpdate is emitted when a message is updated (not necessarily a user edit).
-	MessageUpdate Signal[MessageUpdateEvent]
-	// MessageDelete is emitted when a message is deleted.
-	MessageDelete Signal[MessageDeleteEvent]
 
 	// See [Shard.PacketReceived].
 	ShardPacketReceived Signal[ShardPacketEvent]
@@ -56,27 +56,6 @@ type gatewayEvents struct {
 	ShardResumed Signal[ShardResumeEvent]
 	// See [Shard.Disconnected].
 	ShardDisconnected Signal[ShardDisconnectEvent]
-}
-
-// GuildAddEvent represents a guild becoming available or being joined.
-type GuildAddEvent struct {
-	Shard *Shard `json:"-"`
-	Guild
-}
-
-// GuildUpdateEvent represents a guild being updated.
-// The guild collections will only be present if the guild was already cached.
-type GuildUpdateEvent struct {
-	Shard *Shard `json:"-"`
-	Guild
-}
-
-// GuildRemoveEvent represents a guild becoming unavailable or being left/deleted.
-type GuildRemoveEvent struct {
-	Shard *Shard
-	ID    ID
-	// Cached is the guild that was removed from the cache by this event, if any.
-	Cached *Guild
 }
 
 type ChannelCreateEvent struct {
@@ -98,6 +77,64 @@ type ChannelUpdateBulkEvent struct {
 type ChannelDeleteEvent struct {
 	Shard *Shard `json:"-"`
 	Channel
+}
+
+// MessageCreateEvent represents a received message.
+type MessageCreateEvent struct {
+	Shard   *Shard  `json:"-"`
+	Member  *Member `json:"member"`
+	GuildID *ID     `json:"guild_id"`
+	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
+	Nonce *string `json:"nonce"`
+	Message
+}
+
+type MessageUpdateEvent struct {
+	Shard   *Shard  `json:"-"`
+	Member  *Member `json:"member"`
+	GuildID *ID     `json:"guild_id"`
+	Message
+}
+
+type MessageDeleteEvent struct {
+	Shard     *Shard   `json:"-"`
+	GuildID   *ID      `json:"guild_id"`
+	ChannelID ID       `json:"channel_id"`
+	MessageID ID       `json:"id"`
+	Content   *string  `json:"content"`
+	AuthorID  *ID      `json:"author_id"`
+	Member    *Member  `json:"member"`
+	Cached    *Message `json:"-"`
+}
+
+type TypingStartEvent struct {
+	Shard     *Shard
+	ChannelID ID
+	UserID    ID
+	Timestamp time.Time
+	GuildID   *ID
+	Member    *Member
+}
+
+// GuildAddEvent represents a guild becoming available or being joined.
+type GuildAddEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
+}
+
+// GuildUpdateEvent represents a guild being updated.
+// The guild collections will only be present if the guild was already cached.
+type GuildUpdateEvent struct {
+	Shard *Shard `json:"-"`
+	Guild
+}
+
+// GuildRemoveEvent represents a guild becoming unavailable or being left/deleted.
+type GuildRemoveEvent struct {
+	Shard *Shard
+	ID    ID
+	// Cached is the guild that was removed from the cache by this event, if any.
+	Cached *Guild
 }
 
 type RoleCreateEvent struct {
@@ -155,43 +192,6 @@ type GuildStickersUpdateEvent struct {
 	Shard    *Shard         `json:"-"`
 	GuildID  ID             `json:"guild_id"`
 	Stickers []GuildSticker `json:"stickers"`
-}
-
-type TypingStartEvent struct {
-	Shard     *Shard
-	ChannelID ID
-	UserID    ID
-	Timestamp time.Time
-	GuildID   *ID
-	Member    *Member
-}
-
-// MessageCreateEvent represents a received message.
-type MessageCreateEvent struct {
-	Shard   *Shard  `json:"-"`
-	Member  *Member `json:"member"`
-	GuildID *ID     `json:"guild_id"`
-	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
-	Nonce *string `json:"nonce"`
-	Message
-}
-
-type MessageUpdateEvent struct {
-	Shard   *Shard  `json:"-"`
-	Member  *Member `json:"member"`
-	GuildID *ID     `json:"guild_id"`
-	Message
-}
-
-type MessageDeleteEvent struct {
-	Shard     *Shard   `json:"-"`
-	GuildID   *ID      `json:"guild_id"`
-	ChannelID ID       `json:"channel_id"`
-	MessageID ID       `json:"id"`
-	Content   *string  `json:"content"`
-	AuthorID  *ID      `json:"author_id"`
-	Member    *Member  `json:"member"`
-	Cached    *Message `json:"-"`
 }
 
 type shardEvents struct {

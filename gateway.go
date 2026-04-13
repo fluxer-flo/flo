@@ -793,6 +793,175 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	case "RESUMED":
 		s.Resumed.emit(ShardResumeEvent{s})
 		s.gateway.ShardResumed.emit(ShardResumeEvent{s})
+	case "CHANNEL_CREATE":
+		event := ChannelCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_CREATE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Set(event.ID, event.Channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelCreate.emit(event)
+	case "CHANNEL_UPDATE":
+		event := ChannelUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Set(event.ID, event.Channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelUpdate.emit(event)
+	case "CHANNEL_UPDATE_BULK":
+		event := ChannelUpdateBulkEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE_BULK data: %w", err)
+		}
+
+		if cache != nil {
+			guild, ok := cache.Guilds.Get(event.GuildID)
+			if ok && guild.Channels != nil {
+				for _, channel := range event.Channels {
+					guild.Channels.Set(channel.ID, channel)
+				}
+			}
+		}
+
+		s.gateway.ChannelUpdateBulk.emit(event)
+	case "CHANNEL_DELETE":
+		event := ChannelDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal CHANNEL_DELETE data: %w", err)
+		}
+
+		if cache != nil {
+			if event.Channel.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
+				if ok && guild.Channels != nil {
+					guild.Channels.Delete(event.Channel.ID)
+				}
+			}
+		}
+	case "MESSAGE_CREATE":
+		event := MessageCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_CREATE data: %w", err)
+		}
+
+		if event.Member != nil {
+			event.Member.User = event.Message.Author
+		}
+
+		if cache != nil {
+			event.Message.updateCache(cache)
+
+			updateChannel := func(cached *Channel) {
+				lastMessageID := event.Message.ID
+				cached.LastMessageID = &lastMessageID
+
+				if cached.Messages != nil {
+					cached.Messages.Set(event.Message.ID, event.Message)
+				}
+			}
+
+			if event.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.GuildID)
+				if ok {
+					guild.Channels.optUpdate(event.ChannelID, updateChannel)
+					guild.Members.optSet(event.Member.ID(), *event.Member)
+				}
+			}
+		}
+
+		s.gateway.MessageCreate.emit(event)
+	case "MESSAGE_UPDATE":
+		event := MessageUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data")
+		}
+
+		if cache != nil {
+			event.Message.updateCache(cache)
+
+			if event.GuildID != nil {
+				guild, ok := cache.Guilds.Get(*event.GuildID)
+				if ok {
+					if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
+						channel.Messages.optSet(event.Message.ID, event.Message)
+					}
+					if event.Member != nil && guild.Members != nil {
+						guild.Members.Set(event.Member.ID(), *event.Member)
+					}
+				}
+			}
+		}
+
+		s.gateway.MessageUpdate.emit(event)
+	case "MESSAGE_DELETE":
+		event := MessageDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE payload: %w", err)
+		}
+
+		if cache != nil && event.GuildID != nil {
+			guild, ok := cache.Guilds.Get(*event.GuildID)
+			if ok {
+				if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
+					if cached, ok := channel.Messages.optDelete(event.MessageID); ok {
+						event.Cached = cached
+					}
+				}
+				if event.Member != nil && guild.Members != nil {
+					guild.Members.Set(event.Member.ID(), *event.Member)
+				}
+			}
+		}
+
+		s.gateway.MessageDelete.emit(event)
+	case "TYPING_START":
+		var raw struct {
+			ChannelID ID      `json:"channel_id"`
+			UserID    ID      `json:"user_id"`
+			Timestamp int64   `json:"timestamp"`
+			GuildID   *ID     `json:"guild_id"`
+			Member    *Member `json:"member"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal TYPING_START data: %w", err)
+		}
+
+		raw.Member.updateCache(cache)
+
+		event := TypingStartEvent{
+			Shard:     s,
+			ChannelID: raw.ChannelID,
+			UserID:    raw.UserID,
+			Timestamp: time.UnixMilli(raw.Timestamp),
+			GuildID:   raw.GuildID,
+			Member:    raw.Member,
+		}
+		s.gateway.TypingStart.emit(event)
 	case "GUILD_CREATE":
 		var raw gatewayGuild
 		err := json.Unmarshal(packet.Data, &raw)
@@ -860,72 +1029,6 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			s.gateway.GuildUnavailable.emit(event)
 		} else {
 			s.gateway.GuildDelete.emit(event)
-		}
-	case "CHANNEL_CREATE":
-		event := ChannelCreateEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal CHANNEL_CREATE data: %w", err)
-		}
-
-		if cache != nil {
-			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
-				if ok && guild.Channels != nil {
-					guild.Channels.Set(event.ID, event.Channel)
-				}
-			}
-		}
-
-		s.gateway.ChannelCreate.emit(event)
-	case "CHANNEL_UPDATE":
-		event := ChannelUpdateEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE data: %w", err)
-		}
-
-		if cache != nil {
-			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
-				if ok && guild.Channels != nil {
-					guild.Channels.Set(event.ID, event.Channel)
-				}
-			}
-		}
-
-		s.gateway.ChannelUpdate.emit(event)
-	case "CHANNEL_UPDATE_BULK":
-		event := ChannelUpdateBulkEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal CHANNEL_UPDATE_BULK data: %w", err)
-		}
-
-		if cache != nil {
-			guild, ok := cache.Guilds.Get(event.GuildID)
-			if ok && guild.Channels != nil {
-				for _, channel := range event.Channels {
-					guild.Channels.Set(channel.ID, channel)
-				}
-			}
-		}
-
-		s.gateway.ChannelUpdateBulk.emit(event)
-	case "CHANNEL_DELETE":
-		event := ChannelDeleteEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal CHANNEL_DELETE data: %w", err)
-		}
-
-		if cache != nil {
-			if event.Channel.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.Channel.GuildID)
-				if ok && guild.Channels != nil {
-					guild.Channels.Delete(event.Channel.ID)
-				}
-			}
 		}
 	case "GUILD_ROLE_CREATE":
 		var raw struct {
@@ -1103,109 +1206,6 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildStickersUpdate.emit(event)
-	case "MESSAGE_CREATE":
-		event := MessageCreateEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal MESSAGE_CREATE data: %w", err)
-		}
-
-		if event.Member != nil {
-			event.Member.User = event.Message.Author
-		}
-
-		if cache != nil {
-			event.Message.updateCache(cache)
-
-			updateChannel := func(cached *Channel) {
-				lastMessageID := event.Message.ID
-				cached.LastMessageID = &lastMessageID
-
-				if cached.Messages != nil {
-					cached.Messages.Set(event.Message.ID, event.Message)
-				}
-			}
-
-			if event.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.GuildID)
-				if ok {
-					guild.Channels.optUpdate(event.ChannelID, updateChannel)
-					guild.Members.optSet(event.Member.ID(), *event.Member)
-				}
-			}
-		}
-
-		s.gateway.MessageCreate.emit(event)
-	case "MESSAGE_UPDATE":
-		event := MessageUpdateEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data")
-		}
-
-		if cache != nil {
-			event.Message.updateCache(cache)
-
-			if event.GuildID != nil {
-				guild, ok := cache.Guilds.Get(*event.GuildID)
-				if ok {
-					if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
-						channel.Messages.optSet(event.Message.ID, event.Message)
-					}
-					if event.Member != nil && guild.Members != nil {
-						guild.Members.Set(event.Member.ID(), *event.Member)
-					}
-				}
-			}
-		}
-
-		s.gateway.MessageUpdate.emit(event)
-	case "MESSAGE_DELETE":
-		event := MessageDeleteEvent{Shard: s}
-		err := json.Unmarshal(packet.Data, &event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE payload: %w", err)
-		}
-
-		if cache != nil && event.GuildID != nil {
-			guild, ok := cache.Guilds.Get(*event.GuildID)
-			if ok {
-				if channel, ok := guild.Channels.optGet(event.ChannelID); ok {
-					if cached, ok := channel.Messages.optDelete(event.MessageID); ok {
-						event.Cached = cached
-					}
-				}
-				if event.Member != nil && guild.Members != nil {
-					guild.Members.Set(event.Member.ID(), *event.Member)
-				}
-			}
-		}
-
-		s.gateway.MessageDelete.emit(event)
-	case "TYPING_START":
-		var raw struct {
-			ChannelID ID      `json:"channel_id"`
-			UserID    ID      `json:"user_id"`
-			Timestamp int64   `json:"timestamp"`
-			GuildID   *ID     `json:"guild_id"`
-			Member    *Member `json:"member"`
-		}
-		err := json.Unmarshal(packet.Data, &raw)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal TYPING_START data: %w", err)
-		}
-
-		raw.Member.updateCache(cache)
-
-		event := TypingStartEvent{
-			Shard:     s,
-			ChannelID: raw.ChannelID,
-			UserID:    raw.UserID,
-			Timestamp: time.UnixMilli(raw.Timestamp),
-			GuildID:   raw.GuildID,
-			Member:    raw.Member,
-		}
-		s.gateway.TypingStart.emit(event)
 	default:
 		slog.Warn("don't know how to handle event " + *packet.Event)
 	}
