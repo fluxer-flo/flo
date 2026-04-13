@@ -1122,6 +1122,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			if ok && guild.Members != nil {
 				guild.Members.Set(event.ID(), event.Member)
 			}
+
+			event.updateCache(cache)
 		}
 
 		s.gateway.MemberAdd.emit(event)
@@ -1137,6 +1139,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			if ok && guild.Members != nil {
 				guild.Members.Set(event.ID(), event.Member)
 			}
+
+			event.updateCache(cache)
 		}
 
 		s.gateway.MemberUpdate.emit(event)
