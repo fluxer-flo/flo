@@ -47,6 +47,8 @@ type gatewayEvents struct {
 	GuildEmojisUpdate Signal[GuildEmojisUpdateEvent]
 	// GuildStickersUpdate is emitted when a guild's stickers are modified.
 	GuildStickersUpdate Signal[GuildStickersUpdateEvent]
+	// UserUpdate is emitted when the current user changes.
+	UserUpdate Signal[UserUpdateEvent]
 
 	// See [Shard.PacketReceived].
 	ShardPacketReceived Signal[ShardPacketEvent]
@@ -192,6 +194,11 @@ type GuildStickersUpdateEvent struct {
 	Shard    *Shard         `json:"-"`
 	GuildID  ID             `json:"guild_id"`
 	Stickers []GuildSticker `json:"stickers"`
+}
+
+type UserUpdateEvent struct {
+	Shard *Shard `json:"-"`
+	UserPrivate
 }
 
 type shardEvents struct {

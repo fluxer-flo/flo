@@ -896,7 +896,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := MessageUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data")
+			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data: %w", err)
 		}
 
 		if cache != nil {
@@ -920,7 +920,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := MessageDeleteEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE payload: %w", err)
+			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE data: %w", err)
 		}
 
 		if cache != nil && event.GuildID != nil {
@@ -1097,7 +1097,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := RoleDeleteEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_ROLE_DELETE: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_ROLE_DELETE data: %w", err)
 		}
 
 		if cache != nil {
@@ -1114,7 +1114,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := MemberAddEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_ADD: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_ADD data: %w", err)
 		}
 
 		if cache != nil {
@@ -1129,7 +1129,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := MemberUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_UPDATE: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_UPDATE data: %w", err)
 		}
 
 		if cache != nil {
@@ -1149,7 +1149,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 		err := json.Unmarshal(packet.Data, &raw)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_REMOVE: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_MEMBER_REMOVE data: %w", err)
 		}
 
 		event := MemberRemoveEvent{
@@ -1172,7 +1172,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := GuildEmojisUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_EMOJIS_UPDATE: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_EMOJIS_UPDATE data: %w", err)
 		}
 
 		if cache != nil {
@@ -1191,7 +1191,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		event := GuildStickersUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal GUILD_STICKERS_UPDATE: %w", err)
+			return fmt.Errorf("failed to unmarshal GUILD_STICKERS_UPDATE data: %w", err)
 		}
 
 		if cache != nil {
@@ -1206,6 +1206,18 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildStickersUpdate.emit(event)
+	case "USER_UPDATE":
+		event := UserUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal USER_UPDATE data: %w", err)
+		}
+
+		if cache != nil {
+			cache.UpdateCurrentUser(event.UserPrivate)
+		}
+
+		s.gateway.UserUpdate.emit(event)
 	default:
 		slog.Warn("don't know how to handle event " + *packet.Event)
 	}
