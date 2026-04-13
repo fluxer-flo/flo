@@ -19,36 +19,32 @@ type signalCallback[T any] struct {
 }
 
 // On adds a listener to the the signal which will be spawned on a new goroutine.
-// It can be removed by calling [SignalListener.Remove] on the result.
 // You can also use OnSync to listen on whatever goroutine emitted it.
-func (s *Signal[T]) On(f func(T)) SignalListener[T] {
+func (s *Signal[T]) On(f func(T)) ListenerRemoveFunc {
 	return s.OnSync(func(t T) {
 		go f(t)
 	})
 }
 
 // Once adds a one-time listener to the the signal which will be spawned on a new goroutine.
-// It can be removed by calling [SignalListener.Remove] on the result.
 // You can also use OnceSync to listen on whatever goroutine emitted it.
-func (s *Signal[T]) Once(f func(T)) SignalListener[T] {
+func (s *Signal[T]) Once(f func(T)) ListenerRemoveFunc {
 	return s.OnceSync(func(t T) {
 		go f(t)
 	})
 }
 
 // OnSync adds a listener to the the signal which will be fired on the same gorountine as it is emitted.
-// It can be removed by calling [SignalListener.Remove] on the result.
-func (s *Signal[T]) OnSync(f func(T)) SignalListener[T] {
+func (s *Signal[T]) OnSync(f func(T)) ListenerRemoveFunc {
 	return s.on(f, false)
 }
 
 // OnceSync adds a one-time listener to the the signal which will be fired on the same gorountine as it is emitted.
-// It can be removed by calling [SignalListener.Remove] on the result.
-func (s *Signal[T]) OnceSync(f func(T)) SignalListener[T] {
+func (s *Signal[T]) OnceSync(f func(T)) ListenerRemoveFunc {
 	return s.on(f, true)
 }
 
-func (s *Signal[T]) Chan() (<-chan T, SignalListener[T]) {
+func (s *Signal[T]) Chan() (<-chan T, ListenerRemoveFunc) {
 	ch := make(chan T)
 	return ch, s.On(func(t T) {
 		go func() {
@@ -57,7 +53,7 @@ func (s *Signal[T]) Chan() (<-chan T, SignalListener[T]) {
 	})
 }
 
-func (s *Signal[T]) OnceChan() (chan T, SignalListener[T]) {
+func (s *Signal[T]) OnceChan() (chan T, ListenerRemoveFunc) {
 	result := make(chan T)
 	return result, s.Once(func(t T) {
 		go func() {
@@ -66,14 +62,10 @@ func (s *Signal[T]) OnceChan() (chan T, SignalListener[T]) {
 	})
 }
 
-// SignalListener is a handle for an added listener which can be used to remove it.
-type SignalListener[T any] struct {
-	signal  *Signal[T]
-	id      uint64
-	removed bool
-}
+// ListenerRemoveFunc can be used to remove a listener by calling it.
+type ListenerRemoveFunc func()
 
-func (s *Signal[T]) on(f func(T), once bool) SignalListener[T] {
+func (s *Signal[T]) on(f func(T), once bool) ListenerRemoveFunc {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -83,39 +75,29 @@ func (s *Signal[T]) on(f func(T), once bool) SignalListener[T] {
 		once: once,
 	})
 
-	result := SignalListener[T]{
-		signal: s,
-		id:     s.id,
-	}
-
+	id := s.id
 	s.id++
-	return result
+	return func() {
+		s.remove(id)
+	}
 }
 
-// Remove removes the listener from the signal if it has not already been removed - returning true if so.
-func (l *SignalListener[T]) Remove() bool {
-	l.signal.mu.Lock()
-	defer l.signal.mu.Unlock()
+func (s *Signal[T]) remove(id uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if l.removed {
-		return false
-	}
-
-	l.removed = true
-
-	idx := len(l.signal.callbacks) - 1
+	idx := len(s.callbacks) - 1
 	for ; idx >= 0; idx-- {
-		if l.signal.callbacks[idx].id == l.id {
+		if s.callbacks[idx].id == id {
 			break
 		}
 	}
 
 	if idx < 0 {
-		return false
+		return
 	}
 
-	l.signal.callbacks = append(l.signal.callbacks[:idx], l.signal.callbacks[idx+1:]...)
-	return true
+	s.callbacks = append(s.callbacks[:idx], s.callbacks[idx+1:]...)
 }
 
 // ClearListeners removes all listeners from the signal.

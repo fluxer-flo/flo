@@ -37,43 +37,29 @@ func TestSignal(t *testing.T) {
 	t.Run("listener removal", func(t *testing.T) {
 		var signal Signal[int]
 
-		repeatRemoval := func(h SignalListener[int]) {
-			hCopy := h
-
-			ok := h.Remove()
-			if !ok {
-				t.Errorf("expected first listener handle removal to return true")
-			}
-
-			ok = h.Remove()
-			if ok {
-				t.Errorf("expected second listener handle removal to return false")
-			}
-
-			ok = hCopy.Remove()
-			if ok {
-				t.Errorf("expected duplicated listener handle removal to return false")
-			}
-		}
-
 		var outputs []int
-		h := signal.OnSync(appender(&outputs))
-		repeatRemoval(h)
+		rm := signal.OnSync(appender(&outputs))
+		rm()
+		rm()
 		signal.OnSync(offset(appender(&outputs), 10))
 		signal.OnSync(offset(appender(&outputs), 20))
 		signal.OnSync(offset(appender(&outputs), 30))
-		h2 := signal.OnSync(offset(appender(&outputs), 40))
-		h3 := signal.OnSync(offset(appender(&outputs), 50))
+		rm2 := signal.OnSync(offset(appender(&outputs), 40))
+		rm3 := signal.OnSync(offset(appender(&outputs), 50))
 		signal.OnSync(offset(appender(&outputs), 60))
-		h4 := signal.OnSync(offset(appender(&outputs), 70))
-		h5 := signal.OnSync(offset(appender(&outputs), 80))
-		repeatRemoval(h2)
-		repeatRemoval(h3)
+		rm4 := signal.OnSync(offset(appender(&outputs), 70))
+		rm5 := signal.OnSync(offset(appender(&outputs), 80))
+		rm2()
+		rm2()
+		rm3()
+		rm3()
 
 		signal.emit(3)
-		repeatRemoval(h4)
+		rm4()
+		rm4()
 		signal.emit(2)
-		repeatRemoval(h5)
+		rm5()
+		rm5()
 		signal.emit(1)
 
 		expectedOutputs := []int{
