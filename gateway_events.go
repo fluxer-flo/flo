@@ -50,14 +50,20 @@ type gatewayEvents struct {
 	// UserUpdate is emitted when the current user changes.
 	UserUpdate Signal[UserUpdateEvent]
 
-	// See [Shard.PacketReceived].
+	// See [Shard.Packet].
 	ShardPacketReceived Signal[ShardPacketEvent]
 	// See [Shard.Ready].
 	ShardReady Signal[ShardReadyEvent]
 	// See [Shard.Resumed].
-	ShardResumed Signal[ShardResumeEvent]
+	ShardResumed Signal[ShardResumedEvent]
+	// See [Shard.Connected].
+	ShardConnected Signal[ShardConnectedEvent]
 	// See [Shard.Disconnected].
-	ShardDisconnected Signal[ShardDisconnectEvent]
+	ShardDisconnected Signal[ShardDisconnectedEvent]
+	// See [Shard.Started].
+	ShardStarted Signal[ShardStartedEvent]
+	// See [Shard.Stopped].
+	ShardStopped Signal[ShardStoppedEvent]
 }
 
 type ChannelCreateEvent struct {
@@ -210,9 +216,15 @@ type shardEvents struct {
 	// Resumed is emitted when a RESUMED packet is received.
 	// This means a session was successfully resumed, but this won't always happen when reconnecting.
 	// If resuming failed, a new session will be started which will cause Ready to be emitted again.
-	Resumed Signal[ShardResumeEvent]
+	Resumed Signal[ShardResumedEvent]
+	// Connected is emitted when a websocket connection is established.
+	Connected Signal[ShardConnectedEvent]
 	// Disconnected is emitted when a websocket session ends.
-	Disconnected Signal[ShardDisconnectEvent]
+	Disconnected Signal[ShardDisconnectedEvent]
+	// Started is emitted when the shard starts.
+	Started Signal[ShardStartedEvent]
+	// Stopped is emitted when the shard stops.
+	Stopped Signal[ShardStoppedEvent]
 }
 
 type ShardPacketEvent struct {
@@ -235,13 +247,25 @@ type ReadyGuild struct {
 	Guild *Guild
 }
 
-type ShardResumeEvent struct {
+type ShardResumedEvent struct {
 	Shard *Shard
 }
 
-type ShardDisconnectEvent struct {
+type ShardConnectedEvent struct {
+	Shard *Shard
+}
+
+type ShardDisconnectedEvent struct {
 	Shard *Shard
 	Err   error
 	// Reconnecting is true if the shard will try to reconnect.
 	Reconnecting bool
+}
+
+type ShardStartedEvent struct {
+	Shard *Shard
+}
+
+type ShardStoppedEvent struct {
+	Shard *Shard
 }

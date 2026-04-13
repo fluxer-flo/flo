@@ -108,14 +108,13 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 	return shards[id-g.FirstShard], true
 }
 
-// Connect attemps to starts all shards.
+// Start attemps to starts all shards.
 // The sharding parameters should not be changed after this is called.
-// If some of the shards were already running an error will be returned.
 // You may ignore this if it is not important.
-func (g *Gateway) Connect() error {
+func (g *Gateway) Start() error {
 	var errs []error
 	for _, shard := range g.Shards() {
-		err := shard.Connect()
+		err := shard.Start()
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
 				"failed to connect shard #%d: %w",
@@ -128,15 +127,33 @@ func (g *Gateway) Connect() error {
 	return errors.Join(errs...)
 }
 
-// Disconnect attemps to disconnect all running shards.
-// If some of the shards were not running or already disconnecting an error will be returned.
-func (g *Gateway) Disconnect(reconnect bool) error {
+// Stop attemps to stop all running shards.
+// If some of the shards were not running or already stopping an error will be returned.
+func (g *Gateway) Stop() error {
 	var errs []error
 	for _, shard := range g.Shards() {
-		err := shard.Disconnect(reconnect)
+		err := shard.Stop()
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"failed to disconnect shard #%d: %w",
+				"failed to stop shard #%d: %w",
+				shard.id,
+				err,
+			))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// Reconnect attemps to reconnect all running shards.
+// If some of the shards were not running or already disconnecting/stopping an error will be returned.
+func (g *Gateway) Reconnect() error {
+	var errs []error
+	for _, shard := range g.Shards() {
+		err := shard.Reconnect()
+		if err != nil {
+			errs = append(errs, fmt.Errorf(
+				"failed to reconnect shard #%d: %w",
 				shard.id,
 				err,
 			))
@@ -175,7 +192,6 @@ type Shard struct {
 
 	gateway *Gateway
 	id      uint
-	log     *slog.Logger
 
 	// stateMu is the mutex for the shared state of the shard.
 	stateMu       sync.Mutex
@@ -197,15 +213,6 @@ type Shard struct {
 	lastSeq   uint
 }
 
-type shardState uint
-
-const (
-	shardStateDisconnected shardState = iota
-	shardStateDisconnecting
-	shardStateConnecting
-	shardStateConnected
-)
-
 func (s *Shard) Gateway() *Gateway {
 	return s.gateway
 }
@@ -217,12 +224,21 @@ func (s *Shard) ID() uint {
 var (
 	ErrShardAlreadyRunning       = errors.New("shard already running")
 	ErrShardNotRunning           = errors.New("shard not running")
+	ErrShardAlreadyStopping      = errors.New("shard already stopping")
 	ErrShardAlreadyDisconnecting = errors.New("shard already disconnecting")
 )
 
-// Connect starts the shard on a new gorountine.
+// Running is true if the shard has an actively running gorountine from calling Connect.
+func (s *Shard) Running() bool {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	return s.running
+}
+
+// Start starts the shard on a new gorountine.
 // After this, calls will return [ErrShardAlreadyRunning] until Disconnect(false) is called and the disconnection completes.
-func (s *Shard) Connect() error {
+func (s *Shard) Start() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -239,10 +255,37 @@ func (s *Shard) Connect() error {
 	return nil
 }
 
-// Disconnect signals for the shard to be disconnected.
-// If reconnect is true, it will try to reconnect again after disconnnecting.
-// If there is already a pending disconnect, this will return [ErrShardAlreadyDisconnecting].
-func (s *Shard) Disconnect(reconnect bool) error {
+// Disconnect signals for the shard to be stopped.
+// If the shard is not running, this will return [ErrShardNotRunning].
+// If the shard is already in the process of being stopped, this will return [ErrShardAlreadyStopping].
+func (s *Shard) Stop() error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if !s.running {
+		return ErrShardNotRunning
+	}
+
+	if s.reqDisconnect == nil {
+		if s.reqReconnect {
+			s.reqReconnect = false
+			return nil
+		} else {
+			return ErrShardAlreadyStopping
+		}
+	}
+
+	s.reqDisconnect()
+	s.reqDisconnect = nil
+	s.reqReconnect = false
+	return nil
+
+}
+
+// Reconnect signals for the shard to be reconnected.
+// If the shard is not running, this will return [ErrShardNotRunning].
+// If the shard is already in the process of being disconnected/stopped, this will return [ErrShardAlreadyDisconnecting].
+func (s *Shard) Reconnect() error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -256,7 +299,7 @@ func (s *Shard) Disconnect(reconnect bool) error {
 
 	s.reqDisconnect()
 	s.reqDisconnect = nil
-	s.reqReconnect = reconnect
+	s.reqReconnect = true
 	return nil
 }
 
@@ -298,20 +341,26 @@ func (s *Shard) resetSession() {
 }
 
 func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
+	s.Started.emit(ShardStartedEvent{s})
+	s.gateway.ShardStarted.emit(ShardStartedEvent{s})
+
 	var attempts uint
 	var sleepTime time.Duration
 
+	defer func() {
+		cancel()
+
+		s.stateMu.Lock()
+		s.running = false
+		s.stateMu.Unlock()
+
+		s.Stopped.emit(ShardStoppedEvent{s})
+		s.gateway.ShardStopped.emit(ShardStoppedEvent{s})
+	}()
+
 	for {
-		if attempts != 0 {
-			ctx, cancel = context.WithCancel(context.Background())
-
-			s.stateMu.Lock()
-			s.reqDisconnect = cancel
-			s.stateMu.Unlock()
-		}
-
 		if sleepTime != 0 {
-			var disconnect bool
+			var reconnect bool
 
 			select {
 			case <-ctx.Done():
@@ -322,12 +371,16 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				)
 
 				s.stateMu.Lock()
-				disconnect = !s.reqReconnect
+				reconnect = s.reqReconnect
+				if reconnect {
+					ctx, cancel = context.WithCancel(context.Background())
+					s.reqDisconnect = cancel
+				}
 				s.stateMu.Unlock()
 			case <-time.After(sleepTime):
 			}
 
-			if disconnect {
+			if !reconnect {
 				break
 			}
 		}
@@ -354,6 +407,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		if errors.Is(err, context.Canceled) {
 			s.stateMu.Lock()
 			reconnect := s.reqReconnect
+			if reconnect {
+				ctx, cancel = context.WithCancel(context.Background())
+				s.reqDisconnect = cancel
+			}
 			s.stateMu.Unlock()
 
 			if reconnect {
@@ -387,6 +444,9 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			continue
 		}
 
+		s.Connected.emit(ShardConnectedEvent{s})
+		s.gateway.ShardConnected.emit(ShardConnectedEvent{s})
+
 		connStartTime := time.Now()
 
 		s.conn = conn
@@ -408,6 +468,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		if errors.Is(err, context.Canceled) {
 			s.stateMu.Lock()
 			reconnect = s.reqReconnect
+			if reconnect {
+				ctx, cancel = context.WithCancel(context.Background())
+				s.reqDisconnect = cancel
+			}
 			s.stateMu.Unlock()
 
 			if reconnect {
@@ -461,7 +525,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			}
 		}
 
-		event := ShardDisconnectEvent{
+		event := ShardDisconnectedEvent{
 			Err:          err,
 			Reconnecting: reconnect,
 		}
@@ -477,16 +541,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			)
 		}
 
-		cancel()
-
 		if !reconnect {
 			break
 		}
 	}
-
-	s.stateMu.Lock()
-	s.running = false
-	s.stateMu.Unlock()
 }
 
 func (s *Shard) readLoop() {
@@ -791,8 +849,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			}
 		}
 	case "RESUMED":
-		s.Resumed.emit(ShardResumeEvent{s})
-		s.gateway.ShardResumed.emit(ShardResumeEvent{s})
+		s.Resumed.emit(ShardResumedEvent{s})
+		s.gateway.ShardResumed.emit(ShardResumedEvent{s})
 	case "CHANNEL_CREATE":
 		event := ChannelCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
