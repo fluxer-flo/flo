@@ -70,8 +70,8 @@ func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
 
-func (c *Channel) Edit(ctx context.Context, rest *REST, opts EditChannelOpts) error {
-	channel, err := rest.EditChannel(ctx, c.ID, opts)
+func (c *Channel) Update(ctx context.Context, rest *REST, opts UpdateChannelOpts) error {
+	channel, err := rest.UpdateChannel(ctx, c.ID, opts)
 	if err != nil {
 		return err
 	}

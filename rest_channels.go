@@ -31,7 +31,7 @@ func (r *REST) GetChannel(ctx context.Context, channelID ID) (Channel, error) {
 	return resp, nil
 }
 
-type EditChannelOpts struct {
+type UpdateChannelOpts struct {
 	Name           *string                `json:"name,omitempty"`
 	Topic          *string                `json:"topic,omitempty"`
 	URL            *string                `json:"url,omitempty"`
@@ -49,7 +49,7 @@ type EditChannelOpts struct {
 	Nicks          map[ID]string          `json:"nicks,omitzero"`
 }
 
-func rateLimitEditChannel(channelID ID) RESTRateLimitConfig {
+func rateLimitUpdateChannel(channelID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("channel:update:%d", channelID),
 		Limit:  20,
@@ -57,12 +57,12 @@ func rateLimitEditChannel(channelID ID) RESTRateLimitConfig {
 	}
 }
 
-func (r *REST) EditChannel(ctx context.Context, channelID ID, opts EditChannelOpts) (Channel, error) {
+func (r *REST) UpdateChannel(ctx context.Context, channelID ID, opts UpdateChannelOpts) (Channel, error) {
 	var resp Channel
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "PATCH",
 		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
-		RateLimit: rateLimitEditChannel(channelID),
+		RateLimit: rateLimitUpdateChannel(channelID),
 		Payload:   opts,
 	}, &resp)
 	if err != nil {
