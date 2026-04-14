@@ -300,7 +300,7 @@ func cacheMessageCommon(msg *Message, cache *Cache) {
 		referenced := *msg.ReferencedMessage
 		// NOTE: prevent recursion, just in case
 		referenced.ReferencedMessage = nil
-		cacheMessage(referenced.ReferencedMessage, cache)
+		cacheMessage(msg.ReferencedMessage, cache)
 	}
 }
 
