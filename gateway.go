@@ -931,6 +931,10 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal MESSAGE_UPDATE data: %w", err)
 		}
 
+		if event.Member != nil {
+			event.Member.User = event.Author
+		}
+
 		cacheGatewayMessage((*MessageCreateEvent)(&event), false, cache)
 		s.gateway.MessageUpdate.emit(event)
 	case "MESSAGE_DELETE":

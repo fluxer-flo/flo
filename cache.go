@@ -237,7 +237,13 @@ func cacheGatewayMessage(msg *MessageCreateEvent, isNew bool, cache *Cache) {
 
 	if msg.GuildID != nil {
 		if guild, ok := cache.Guilds.Get(*msg.GuildID); ok {
-			guild.Channels.Update(msg.ChannelID, updateChannel)
+			if msg.Member != nil && guild.Members != nil {
+				guild.Members.Set(msg.Member.ID(), *msg.Member)
+			}
+
+			if guild.Channels != nil {
+				guild.Channels.Update(msg.ChannelID, updateChannel)
+			}
 		}
 	} else {
 		cache.UpdateChannel(msg.ChannelID, updateChannel)
