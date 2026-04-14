@@ -111,6 +111,18 @@ func (g *Gateway) Shard(id uint) (*Shard, bool) {
 	return shards[id-g.FirstShard], true
 }
 
+// Shard returns the shard by the specified ID, which may or may not be connected.
+// If it does not exist on this gateway object, it will panic.
+// The sharding parameters should not be changed after this is called.
+func (g *Gateway) ExpectShard(id uint) *Shard {
+	shard, ok := g.Shard(id)
+	if !ok {
+		panic("shard #%d not managed by this Gateway")
+	}
+
+	return shard
+}
+
 // RunningShards returns the count of shards that are running.
 func (g *Gateway) RunningShards() uint {
 	return uint(g.runningShards.Load())
@@ -204,18 +216,20 @@ type Shard struct {
 	// stateMu is the mutex for the shared state of the shard.
 	stateMu       sync.Mutex
 	running       bool
+	latency       time.Duration
 	reqDisconnect context.CancelFunc
 	reqReconnect  bool
 	// (end of shared state - the remaining fields are only used by a single goroutine at a time)
 
-	conn             *websocket.Conn
-	inbound          chan GatewayPacket
-	outbound         chan GatewayPacket
-	readErr          chan error
-	writeErr         chan error
-	heartbeat        <-chan time.Time
-	pendingHeartRate time.Duration
-	heartbeatACK     bool
+	conn              *websocket.Conn
+	inbound           chan GatewayPacket
+	outbound          chan GatewayPacket
+	readErr           chan error
+	writeErr          chan error
+	heartbeat         <-chan time.Time
+	pendingHeartRate  time.Duration
+	lastHeartbeatSent time.Time
+	heartbeatACK      bool
 
 	sessionID string
 	lastSeq   uint
@@ -244,6 +258,15 @@ func (s *Shard) Running() bool {
 	return s.running
 }
 
+// Latency returns the latency if the shard is running and has determined it.
+// Otherwise it returns 0, false.
+func (s *Shard) Latency() (time.Duration, bool) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	return s.latency, s.latency != 0
+}
+
 // Start starts the shard on a new gorountine.
 // After this, calls will return [ErrShardAlreadyRunning] until Disconnect(false) is called and the disconnection completes.
 func (s *Shard) Start() error {
@@ -255,6 +278,7 @@ func (s *Shard) Start() error {
 	}
 
 	s.running = true
+	s.latency = 0
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s.reqDisconnect = cancel
@@ -363,6 +387,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		s.stateMu.Lock()
 		s.running = false
+		s.latency = 0
 		s.stateMu.Unlock()
 
 		s.Stopped.emit(ShardStoppedEvent{s, stopErr})
@@ -480,6 +505,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		disconnectErr := s.controlLoop(ctx)
 		var reconnect bool
+
+		s.stateMu.Lock()
+		s.latency = 0
+		s.stateMu.Unlock()
 
 		var closeErr *websocket.CloseError
 		if errors.Is(disconnectErr, context.Canceled) {
@@ -710,6 +739,11 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 		s.sendHeartbeat()
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
+
+		latency := time.Since(s.lastHeartbeatSent)
+		if latency > 0 {
+			s.latency = latency
+		}
 	case GatewayOpDispatch:
 		err := s.handleDispatch(packet)
 		if err != nil {
@@ -1196,6 +1230,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 }
 
 func (s *Shard) sendHeartbeat() {
+	s.lastHeartbeatSent = time.Now()
+
 	data := []byte("null")
 	if s.lastSeq != 0 {
 		data = fmt.Append(nil, s.lastSeq)
