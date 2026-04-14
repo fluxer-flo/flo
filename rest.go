@@ -48,6 +48,7 @@ var defaultAPIURL = func() *url.URL {
 type RESTRequest struct {
 	Method    string
 	Path      string
+	Query     string
 	RateLimit RESTRateLimitConfig
 
 	// Payload specifies a JSON body.
@@ -65,7 +66,7 @@ type RESTFormField struct {
 	FileName  string
 	// Content has the content copied from it into the form body.
 	// It can be assumed to be closed after it is passed into Request.
-	Content   io.ReadCloser
+	Content io.ReadCloser
 }
 
 // RESTRateLimitConfig specifies options to be used to rate limit the request together with other requests using the same config..
@@ -101,6 +102,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		httpURL.Path = "/"
 	}
 	httpURL = httpURL.JoinPath(req.Path)
+	httpURL.RawQuery = req.Query
 
 	userAgent := r.UserAgent
 	if userAgent == "" {

@@ -92,6 +92,22 @@ func (c *Channel) GetMessage(ctx context.Context, rest *REST, msgID ID) (Message
 	return rest.GetMessage(ctx, c.ID, msgID)
 }
 
+func (c *Channel) GetMessages(ctx context.Context, rest *REST, opts GetMessagesOpts) ([]Message, error) {
+	return rest.GetMessages(ctx, c.ID, opts)
+}
+
+func (c *Channel) DeleteMessage(ctx context.Context, rest *REST, msgID ID) error {
+	return rest.DeleteMessage(ctx, c.ID, msgID)
+}
+
+func (c *Channel) BulkDeleteMessages(ctx context.Context, rest *REST, messageIDs []ID) error {
+	return rest.BulkDeleteMessages(ctx, c.ID, messageIDs)
+}
+
+func (c *Channel) StartTyping(ctx context.Context, rest *REST) error {
+	return rest.StartTyping(ctx, c.ID)
+}
+
 func (c *Channel) updateProperties(channel *Channel) {
 	oldMessages := c.Messages
 	*c = *channel

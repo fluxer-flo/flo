@@ -262,6 +262,31 @@ func cacheMessage(msg *Message, cache *Cache) {
 	})
 }
 
+func cacheMessages(channelID ID, messages []Message, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	for _, msg := range messages {
+		cacheMessageCommon(&msg, cache)
+	}
+
+	channel, ok := cache.Channel(channelID)
+	if !ok {
+		return
+	}
+
+	for i := range messages {
+		msg := &messages[i]
+
+		channel.Messages.Upsert(msg.ID, *msg, func(cached *Message) {
+			msg.Nonce = cached.Nonce
+			*cached = *msg
+		})
+	}
+
+}
+
 func cacheMessageCommon(msg *Message, cache *Cache) {
 	if msg.WebhookID == nil {
 		cache.Users.Set(msg.Author.ID, msg.Author)
@@ -290,6 +315,22 @@ func uncacheMessage(channelID ID, msgID ID, cache *Cache) {
 	}
 
 	channel.Messages.Delete(msgID)
+}
+
+func uncacheMessages(channelID ID, messageIDs []ID, cache *Cache) {
+	channel, ok := cache.Channel(channelID)
+
+	if !ok {
+		return
+	}
+
+	if channel.Messages == nil {
+		return
+	}
+
+	for _, id := range messageIDs {
+		channel.Messages.Delete(id)
+	}
 }
 
 func uncacheGatewayMessage(msg *MessageDeleteEvent, cache *Cache) *Message {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 )
 
@@ -50,7 +51,7 @@ type EditChannelOpts struct {
 
 func rateLimitEditChannel(channelID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:read:%d", channelID),
+		Bucket: fmt.Sprintf("channel:update:%d", channelID),
 		Limit:  20,
 		Window: 10 * time.Second,
 	}
@@ -86,6 +87,55 @@ func (r *REST) DeleteChannel(ctx context.Context, channelID ID) error {
 		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
 		RateLimit: rateLimitDeleteChannel(channelID),
 	})
+}
+
+type GetMessagesOpts struct {
+	// Around is specified as around=... in the URL if not 0.
+	Around ID
+	// Before is specified as before=... in the URL if not 0.
+	Before ID
+	// After is specified as after=... in the URL if not 0.
+	After ID
+	// Limit is specified as limit=... in the URL if not 0.
+	Limit uint
+}
+
+func rateLimitReadMessages(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:messages:read:%d", channelID),
+		Limit:  100,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) GetMessages(ctx context.Context, channelID ID, opts GetMessagesOpts) ([]Message, error) {
+	query := url.Values{}
+	if opts.Around != 0 {
+		query.Set("around", fmt.Sprint(opts.Around))
+	}
+	if opts.Before != 0 {
+		query.Set("before", fmt.Sprint(opts.Before))
+	}
+	if opts.After != 0 {
+		query.Set("after", fmt.Sprint(opts.After))
+	}
+	if opts.Limit != 0 {
+		query.Set("limit", fmt.Sprint(opts.Limit))
+	}
+
+	var resp []Message
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages", channelID),
+		Query:     query.Encode(),
+		RateLimit: rateLimitReadMessages(channelID),
+	}, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheMessages(channelID, resp, r.Cache)
+	return resp, nil
 }
 
 func rateLimitReadMessage(channelID ID) RESTRateLimitConfig {
@@ -326,4 +376,45 @@ func (r *REST) DeleteMessage(ctx context.Context, channelID ID, msgID ID) error 
 		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
 		RateLimit: rateLimitDeleteMessage(channelID),
 	})
+}
+
+func rateLimitBulkDeleteMessages(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:message:bulk_delete:%d", channelID),
+		Limit:  10,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) BulkDeleteMessages(ctx context.Context, channelID ID, messageIDs []ID) error {
+	uncacheMessages(channelID, messageIDs, r.Cache)
+
+	var payload struct {
+		MessageIDs []ID `json:"message_ids"`
+	}
+	payload.MessageIDs = messageIDs
+
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method:    "POST",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/bulk-delete", channelID),
+		Payload:   payload,
+		RateLimit: rateLimitBulkDeleteMessages(channelID),
+	})
+}
+
+func rateLimitChannelTyping(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:typing:%d", channelID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) StartTyping(ctx context.Context, channelID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method:    "POST",
+		Path:      fmt.Sprintf("/v1/channels/%d/typing", channelID),
+		RateLimit: rateLimitChannelTyping(channelID),
+	})
+
 }
