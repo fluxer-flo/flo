@@ -7,6 +7,143 @@ import (
 	"time"
 )
 
+func rateLimitReadChannel(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:read:%d", channelID),
+		Limit:  100,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) GetChannel(ctx context.Context, channelID ID) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
+		RateLimit: rateLimitReadChannel(channelID),
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	if r.Cache != nil {
+		if resp.GuildID != nil {
+			guild, ok := r.Cache.Guilds.Get(*resp.GuildID)
+			if ok {
+				guild.Channels.optUpsert(channelID, resp, func(cached *Channel) {
+					cached.updateProperties(&resp)
+				})
+			}
+		} else if resp.Type.IsPrivate() {
+			r.Cache.PrivateChannels.Upsert(channelID, resp, func(cached *Channel) {
+				cached.updateProperties(&resp)
+			})
+		}
+	}
+
+	return resp, nil
+}
+
+type EditChannelOpts struct {
+	Name           *string                `json:"name,omitempty"`
+	Topic          *string                `json:"topic,omitempty"`
+	URL            *string                `json:"url,omitempty"`
+	Icon           *string                `json:"icon,omitempty"`
+	OwnerID        *string                `json:"owner_id,omitempty"`
+	Position       *int                   `json:"position,omitempty"`
+	ParentID       *ID                    `json:"parent_id,omitempty"`
+	Bitrate        *int                   `json:"bitrate,omitempty"`
+	UserLimit      *int                   `json:"user_limit,omitempty"`
+	RTCRegion      *string                `json:"rtc_region,omitempty"`
+	PermOverwrites []ChannelPermOverwrite `json:"permission_overwrites,omitzero"`
+	Recipients     []User                 `json:"recipients,omitzero"`
+	NSFW           *bool                  `json:"nsfw,omitempty"`
+	RateLimitSecs  *int                   `json:"rate_limit_per_user,omitempty"`
+	Nicks          map[ID]string          `json:"nicks,omitzero"`
+}
+
+func rateLimitEditChannel(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:read:%d", channelID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) EditChannel(ctx context.Context, channelID ID, opts EditChannelOpts) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "PATCH",
+		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
+		RateLimit: rateLimitEditChannel(channelID),
+		Payload:   opts,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	if r.Cache != nil {
+		if resp.GuildID != nil {
+			guild, ok := r.Cache.Guilds.Get(*resp.GuildID)
+			if ok {
+				guild.Channels.optUpsert(channelID, resp, func(cached *Channel) {
+					cached.updateProperties(&resp)
+				})
+			}
+		} else if resp.Type.IsPrivate() {
+			r.Cache.PrivateChannels.Upsert(channelID, resp, func(cached *Channel) {
+				cached.updateProperties(&resp)
+			})
+		}
+	}
+
+	return resp, nil
+}
+
+func rateLimitDeleteChannel(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:delete:%d", channelID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) DeleteChannel(ctx context.Context, channelID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method:    "DELETE",
+		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
+		RateLimit: rateLimitDeleteChannel(channelID),
+	})
+}
+
+func rateLimitReadMessage(channelID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("channel:message:read:%d", channelID),
+		Limit:  100,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) GetMessage(ctx context.Context, channelID ID, messageID ID) (Message, error) {
+	var resp Message
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		RateLimit: rateLimitReadMessage(channelID),
+	}, &resp)
+	if err != nil {
+		return Message{}, err
+	}
+
+	if r.Cache != nil {
+		if channel, ok := r.Cache.PrivateChannels.Get(resp.ChannelID); ok {
+			channel.Messages.optSet(resp.ID, resp)
+		}
+	}
+
+	return resp, nil
+}
+
 // CreateMessageOpts specifies a message to send.
 type CreateMessageOpts struct {
 	Content          string                 `json:"content,omitempty"`
@@ -139,6 +276,15 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 
 	if r.Cache != nil {
 		resp.updateCache(r.Cache)
+
+		r.Cache.PrivateChannels.Update(channelID, func(channel *Channel) {
+			if channel.LastMessageID == nil ||
+				resp.ID.CreatedAt().After(channel.LastMessageID.CreatedAt()) {
+				lastMessageID := resp.ID
+				channel.LastMessageID = &lastMessageID
+			}
+			channel.Messages.optSet(channelID, resp)
+		})
 	}
 
 	return resp, nil

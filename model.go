@@ -374,6 +374,14 @@ func (c *Collection[T]) Upsert(id ID, val T, update func(val *T)) bool {
 	return true
 }
 
+func (c *Collection[T]) optUpsert(id ID, val T, update func(val *T)) {
+	if c == nil {
+		return
+	}
+
+	c.Upsert(id, val, update)
+}
+
 // Delete removes the item with the specified ID from the collection.
 func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	if c.limit == 0 {

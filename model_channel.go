@@ -70,8 +70,33 @@ func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
 
+func (c *Channel) Edit(rest *REST, ctx context.Context, opts EditChannelOpts) error {
+	channel, err := rest.EditChannel(ctx, c.ID, opts)
+	if err != nil {
+		return err
+	}
+
+	c.updateProperties(&channel)
+	return nil
+}
+
+func (c *Channel) Delete(rest *REST, ctx context.Context) error {
+	return rest.DeleteChannel(ctx, c.ID)
+
+}
+
 func (c *Channel) CreateMessage(rest *REST, ctx context.Context, opts CreateMessageOpts) (Message, error) {
 	return rest.CreateMessage(ctx, c.ID, opts)
+}
+
+func (c *Channel) GetMessage(rest *REST, ctx context.Context, messageID ID) (Message, error) {
+	return rest.GetMessage(ctx, c.ID, messageID)
+}
+
+func (c *Channel) updateProperties(channel *Channel) {
+	oldMessages := c.Messages
+	*c = *channel
+	c.Messages = oldMessages
 }
 
 type ChannelType uint
