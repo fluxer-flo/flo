@@ -2,6 +2,7 @@ package flo
 
 import (
 	"fmt"
+	"iter"
 	"strconv"
 	"sync"
 	"time"
@@ -179,25 +180,50 @@ func (c *Collection[T]) Len() int {
 	return len(c.lookup)
 }
 
-// IDs returns the item IDs in the collection. The order is effectively random.
-func (c *Collection[T]) IDs() []ID {
-	if c == nil || c.limit == 0 {
-		return nil
+// IDs returns a sequence of the item IDs in the collection. The order is effectively random.
+// !! Important: While iterating, no writes may happen - you should therefore not have any blocking operations or call other [Collect] methods within the loop.
+func (c *Collection[T]) IDs() iter.Seq[ID] {
+	return func(yield func(ID) bool) {
+		if c == nil || c.limit == 0 {
+			return
+		}
+
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+
+		if len(c.lookup) == 0 {
+			return
+		}
+
+		for id := range c.lookup {
+			if !yield(id) {
+				break
+			}
+		}
 	}
+}
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+// Items returns a sequence of the items in the collection. The order is effectively random.
+// !! Important: While iterating, no writes may happen - you should therefore not have any blocking operations or call other [Collection] methods within the loop.
+func (c *Collection[T]) Items() iter.Seq2[ID, T] {
+	return func(yield func(ID, T) bool) {
+		if c == nil || c.limit == 0 {
+			return
+		}
 
-	if len(c.lookup) == 0 {
-		return nil
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+
+		if len(c.lookup) == 0 {
+			return
+		}
+
+		for id, entry := range c.lookup {
+			if !yield(id, entry.val) {
+				break
+			}
+		}
 	}
-
-	result := make([]ID, 0, len(c.lookup))
-	for id := range c.lookup {
-		result = append(result, id)
-	}
-
-	return result
 }
 
 // Get returns a value in the collection by ID.
