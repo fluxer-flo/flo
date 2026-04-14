@@ -60,10 +60,10 @@ func rateLimitUpdateChannel(channelID ID) RESTRateLimitConfig {
 func (r *REST) UpdateChannel(ctx context.Context, channelID ID, opts UpdateChannelOpts) (Channel, error) {
 	var resp Channel
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "PATCH",
-		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
-		RateLimit: rateLimitUpdateChannel(channelID),
-		Payload:   opts,
+		Method:         "PATCH",
+		Path:           fmt.Sprintf("/v1/channels/%d", channelID),
+		RateLimit:      rateLimitUpdateChannel(channelID),
+		Payload:        opts,
 	}, &resp)
 	if err != nil {
 		return Channel{}, err
@@ -97,7 +97,7 @@ type GetMessagesOpts struct {
 	// After is specified as after=... in the URL if not 0.
 	After ID
 	// Limit is specified as limit=... in the URL if not 0.
-	Limit uint
+	Limit int
 }
 
 func rateLimitReadMessages(channelID ID) RESTRateLimitConfig {
@@ -416,5 +416,4 @@ func (r *REST) StartTyping(ctx context.Context, channelID ID) error {
 		Path:      fmt.Sprintf("/v1/channels/%d/typing", channelID),
 		RateLimit: rateLimitChannelTyping(channelID),
 	})
-
 }

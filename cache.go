@@ -445,18 +445,41 @@ func cacheMember(guildID ID, member *Member, cache *Cache) {
 		return
 	}
 
+	cacheMemberCommon(member, cache)
+
 	guild, ok := cache.Guilds.Get(guildID)
 	if !ok {
-		cacheMemberCommon(member, cache)
 		return
 	}
 
 	if guild.Members == nil {
-		cacheMemberCommon(member, cache)
 		return
 	}
 
-	cacheGuildMember(&guild, member, cache)
+	guild.Members.Set(member.ID(), *member)
+}
+
+func cacheMembers(guildID ID, members []Member, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	for _, member := range members {
+		cacheMemberCommon(&member, cache)
+	}
+
+	guild, ok := cache.Guilds.Get(guildID)
+	if !ok {
+		return
+	}
+
+	if guild.Members == nil {
+		return
+	}
+
+	for _, member := range members {
+		guild.Members.Set(member.ID(), member)
+	}
 }
 
 func cacheGuildMember(guild *Guild, member *Member, cache *Cache) {

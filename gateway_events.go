@@ -47,6 +47,10 @@ type gatewayEvents struct {
 	GuildEmojisUpdate Signal[GuildEmojisUpdateEvent]
 	// GuildStickersUpdate is emitted when a guild's stickers are modified.
 	GuildStickersUpdate Signal[GuildStickersUpdateEvent]
+	// GuildBanAdd is emitted when a user is banned from a guild.
+	GuildBanAdd Signal[GuildBanAddEvent]
+	// GuildBanRemove is emitted when a user is unbanned from a guild.
+	GuildBanRemove Signal[GuildBanRemoveEvent]
 	// UserUpdate is emitted when the current user changes.
 	UserUpdate Signal[UserUpdateEvent]
 
@@ -301,6 +305,38 @@ type GuildStickersUpdateEvent struct {
 // Guild returns the guild where the stickers are being updated if it is cached.
 func (e *GuildStickersUpdateEvent) Guild(cache *Cache) (Guild, bool) {
 	return cache.Guilds.Get(e.GuildID)
+}
+
+type GuildBanAddEvent struct {
+	Shard   *Shard
+	GuildID ID
+	UserID  ID
+}
+
+// Guild returns the guild where the user was banned if it is cached.
+func (e *GuildBanAddEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
+// User returns the user that was banned if it is cached.
+func (e *GuildBanAddEvent) User(cache *Cache) (User, bool) {
+	return cache.Users.Get(e.UserID)
+}
+
+type GuildBanRemoveEvent struct {
+	Shard   *Shard
+	GuildID ID
+	UserID  ID
+}
+
+// Guild returns the guild where the user was unbanned if it is cached.
+func (e *GuildBanRemoveEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
+// User returns the user that was unbanned if it is cached.
+func (e *GuildBanRemoveEvent) User(cache *Cache) (User, bool) {
+	return cache.Users.Get(e.UserID)
 }
 
 type UserUpdateEvent struct {

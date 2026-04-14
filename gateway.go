@@ -1210,6 +1210,42 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		s.gateway.GuildStickersUpdate.emit(event)
+	case "GUILD_BAN_ADD":
+		var raw struct {
+			GuildID ID `json:"guild_id"`
+			User    struct {
+				ID ID `json:"id"`
+			} `json:"user"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_BAN_REMOVE data: %w", err)
+		}
+
+		event := GuildBanAddEvent{
+			Shard:   s,
+			GuildID: raw.GuildID,
+			UserID:  raw.User.ID,
+		}
+		s.gateway.GuildBanAdd.emit(event)
+	case "GUILD_BAN_REMOVE":
+		var raw struct {
+			GuildID ID `json:"guild_id"`
+			User    struct {
+				ID ID `json:"id"`
+			} `json:"user"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal GUILD_BAN_REMOVE data: %w", err)
+		}
+
+		event := GuildBanRemoveEvent{
+			Shard:   s,
+			GuildID: raw.GuildID,
+			UserID:  raw.User.ID,
+		}
+		s.gateway.GuildBanRemove.emit(event)
 	case "USER_UPDATE":
 		event := UserUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)

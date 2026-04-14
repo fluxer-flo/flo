@@ -1,6 +1,7 @@
 package flo
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"time"
@@ -40,28 +41,51 @@ type Guild struct {
 
 	// Channels is the known channels of the guild.
 	// If the guild is cached, they will be automatically updated.
-	// If this information is not available, this will be nil.
 	Channels *Collection[Channel] `json:"-"`
 	// Roles is the known roles of the guild.
 	// If the guild is cached, they will be automatically updated.
-	// If this information is not available, this will be nil.
 	Roles *Collection[Role] `json:"-"`
 	// Members is the known members of the guild.
 	// If the guild is cached, they will be automatically updated.
-	// If this information is not available, this will be nil.
 	Members *Collection[Member] `json:"-"`
 	// Emojis is the known emojis of the guild.
 	// If the guild is cached, they will be automatically updated.
-	// If this information is not available, this will be nil.
 	Emojis *Collection[GuildEmoji] `json:"-"`
 	// Stickers is the known stickers of the guild.
 	// If the guild is cached, they will be automatically updated.
-	// If this information is not available, this will be nil.
 	Stickers *Collection[GuildSticker] `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
+}
+
+func (g *Guild) GetMembers(ctx context.Context, rest *REST, opts GetMembersOpts) ([]Member, error) {
+	return rest.GetMembers(ctx, g.ID, opts)
+}
+
+func (g *Guild) RemoveMember(ctx context.Context, rest *REST, userID ID) error {
+	return rest.RemoveMember(ctx, g.ID, userID)
+}
+
+func (g *Guild) RemoveMemberWithReason(ctx context.Context, rest *REST, userID ID, reason string) error {
+	return rest.RemoveMemberWithReason(ctx, g.ID, userID, reason)
+}
+
+func (g *Guild) GetBans(ctx context.Context, rest *REST) ([]GuildBan, error) {
+	return rest.GetGuildBans(ctx, g.ID)
+}
+
+func (g *Guild) CreateBan(ctx context.Context, rest *REST, userID ID, opts CreateGuildBanOpts) error {
+	return rest.CreateGuildBan(ctx, g.ID, userID, opts)
+}
+
+func (g *Guild) RemoveBan(ctx context.Context, rest *REST, userID ID) error {
+	return rest.RemoveGuildBan(ctx, g.ID, userID)
+}
+
+func (g *Guild) RemoveBanWithReason(ctx context.Context, rest *REST, userID ID, reason string) error {
+	return rest.RemoveGuildBanWithReason(ctx, g.ID, userID, reason)
 }
 
 func (g *Guild) updateProperties(guild *Guild) {
@@ -450,4 +474,13 @@ type GuildSticker struct {
 	Animated    bool     `json:"animated"`
 	// User is the user who uploaded the emoji, which may not be available in all responses.
 	User *User `json:"user"`
+}
+
+// GuildBan represents a member ban in a guild.
+type GuildBan struct {
+	User        User       `json:"user"`
+	Reason      string     `json:"reason"`
+	ModeratorID ID         `json:"moderator_id"`
+	BannedAt    time.Time  `json:"banned_at"`
+	ExpiresAt   *time.Time `json:"expires_at"`
 }
