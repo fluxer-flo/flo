@@ -54,10 +54,10 @@ func (s *Signal[T]) Chan() (<-chan T, ListenerRemoveFunc) {
 }
 
 func (s *Signal[T]) OnceChan() (chan T, ListenerRemoveFunc) {
-	result := make(chan T)
-	return result, s.Once(func(t T) {
+	ch := make(chan T)
+	return ch, s.Once(func(t T) {
 		go func() {
-			<-result
+			ch <- t
 		}()
 	})
 }
