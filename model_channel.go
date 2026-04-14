@@ -70,7 +70,7 @@ func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
 
-func (c *Channel) Edit(rest *REST, ctx context.Context, opts EditChannelOpts) error {
+func (c *Channel) Edit(ctx context.Context, rest *REST, opts EditChannelOpts) error {
 	channel, err := rest.EditChannel(ctx, c.ID, opts)
 	if err != nil {
 		return err
@@ -80,16 +80,15 @@ func (c *Channel) Edit(rest *REST, ctx context.Context, opts EditChannelOpts) er
 	return nil
 }
 
-func (c *Channel) Delete(rest *REST, ctx context.Context) error {
+func (c *Channel) Delete(ctx context.Context, rest *REST) error {
 	return rest.DeleteChannel(ctx, c.ID)
-
 }
 
-func (c *Channel) CreateMessage(rest *REST, ctx context.Context, opts CreateMessageOpts) (Message, error) {
+func (c *Channel) CreateMessage(ctx context.Context, rest *REST, opts CreateMessageOpts) (Message, error) {
 	return rest.CreateMessage(ctx, c.ID, opts)
 }
 
-func (c *Channel) GetMessage(rest *REST, ctx context.Context, msgID ID) (Message, error) {
+func (c *Channel) GetMessage(ctx context.Context, rest *REST, msgID ID) (Message, error) {
 	return rest.GetMessage(ctx, c.ID, msgID)
 }
 
@@ -230,7 +229,7 @@ func (m *Message) Channel(cache *Cache) (Channel, bool) {
 	return cache.Channel(m.ChannelID)
 }
 
-func (m *Message) Edit(rest *REST, ctx context.Context, opts EditMessageOpts) error {
+func (m *Message) Edit(ctx context.Context, rest *REST, opts EditMessageOpts) error {
 	msg, err := rest.EditMessage(ctx, m.ChannelID, m.ID, opts)
 	if err != nil {
 		return err
@@ -240,7 +239,7 @@ func (m *Message) Edit(rest *REST, ctx context.Context, opts EditMessageOpts) er
 	return nil
 }
 
-func (m *Message) Delete(rest *REST, ctx context.Context) error {
+func (m *Message) Delete(ctx context.Context, rest *REST) error {
 	return rest.DeleteMessage(ctx, m.ChannelID, m.ID)
 }
 
