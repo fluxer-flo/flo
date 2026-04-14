@@ -447,7 +447,6 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 					"shard explicitly stopped while establishing websocket connection",
 					slog.Any("shard", s.ID),
 				)
-				panic("hi")
 				break
 			}
 		} else if err != nil {
