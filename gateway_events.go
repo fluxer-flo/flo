@@ -94,9 +94,30 @@ type MessageCreateEvent struct {
 	Shard   *Shard  `json:"-"`
 	Member  *Member `json:"member"`
 	GuildID *ID     `json:"guild_id"`
-	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
-	Nonce *string `json:"nonce"`
 	Message
+}
+
+// Guild returns the guild the message was sent in if it is cached.
+func (e *MessageCreateEvent) Guild(cache *Cache) (Guild, bool) {
+	if e.GuildID == nil {
+		return Guild{}, false
+	}
+
+	return cache.Guilds.Get(*e.GuildID)
+}
+
+// Channel returns the channel the message was sent in if it is cached.
+func (e *MessageCreateEvent) Channel(cache *Cache) (Channel, bool) {
+	if e.GuildID != nil {
+		guild, ok := cache.Guilds.Get(*e.GuildID)
+		if !ok {
+			return Channel{}, false
+		}
+
+		return guild.Channels.Get(e.ChannelID)
+	} else {
+		return cache.Channel(e.ChannelID)
+	}
 }
 
 type MessageUpdateEvent struct {
@@ -104,6 +125,16 @@ type MessageUpdateEvent struct {
 	Member  *Member `json:"member"`
 	GuildID *ID     `json:"guild_id"`
 	Message
+}
+
+// Guild returns the guild the message was sent in if it was cached.
+func (e *MessageUpdateEvent) Guild(cache *Cache) (Guild, bool) {
+	return (*MessageCreateEvent)(e).Guild(cache)
+}
+
+// Channel returns the channel the message was sent in if it was cached.
+func (e *MessageUpdateEvent) Channel(cache *Cache) (Channel, bool) {
+	return (*MessageUpdateEvent)(e).Channel(cache)
 }
 
 type MessageDeleteEvent struct {
@@ -115,6 +146,29 @@ type MessageDeleteEvent struct {
 	AuthorID  *ID      `json:"author_id"`
 	Member    *Member  `json:"member"`
 	Cached    *Message `json:"-"`
+}
+
+// Guild returns the guild the message was sent in if it is cached.
+func (e *MessageDeleteEvent) Guild(cache *Cache) (Guild, bool) {
+	if e.GuildID == nil {
+		return Guild{}, false
+	}
+
+	return cache.Guilds.Get(*e.GuildID)
+}
+
+// Channel returns the channel the message was sent in if it is cached.
+func (e *MessageDeleteEvent) Channel(cache *Cache) (Channel, bool) {
+	if e.GuildID != nil {
+		guild, ok := cache.Guilds.Get(*e.GuildID)
+		if !ok {
+			return Channel{}, false
+		}
+
+		return guild.Channels.Get(e.ChannelID)
+	} else {
+		return cache.Channel(e.ChannelID)
+	}
 }
 
 type TypingStartEvent struct {
@@ -153,16 +207,31 @@ type RoleCreateEvent struct {
 	Role
 }
 
+// Guild returns the guild where the role is being added if it is cached.
+func (e *RoleCreateEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type RoleUpdateEvent struct {
 	Shard   *Shard `json:"-"`
 	GuildID ID     `json:"-"`
 	Role
 }
 
+// Guild returns the guild where the role is being updated if it is cached.
+func (e *RoleUpdateEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type RoleUpdateBulkEvent struct {
 	Shard   *Shard `json:"-"`
 	GuildID ID     `json:"guild_id"`
 	Roles   []Role `json:"roles"`
+}
+
+// Guild returns the guild where the role is being updated if it is cached.
+func (e *RoleUpdateBulkEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
 }
 
 type RoleDeleteEvent struct {
@@ -173,16 +242,31 @@ type RoleDeleteEvent struct {
 	Cached *Role `json:"-"`
 }
 
+// Guild returns the guild where the role is being deleted if it is cached.
+func (e *RoleDeleteEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type MemberAddEvent struct {
 	Shard   *Shard `json:"-"`
 	GuildID ID     `json:"guild_id"`
 	Member
 }
 
+// Guild returns the guild where the member is being added if it is cached.
+func (e *MemberAddEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type MemberUpdateEvent struct {
 	Shard   *Shard `json:"-"`
 	GuildID ID     `json:"guild_id"`
 	Member
+}
+
+// Guild returns the guild where the member is being updated if it is cached.
+func (e *MemberUpdateEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
 }
 
 type MemberRemoveEvent struct {
@@ -192,16 +276,31 @@ type MemberRemoveEvent struct {
 	Cached   *Member
 }
 
+// Guild returns the guild where the member is being removed if it is cached.
+func (e *MemberRemoveEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type GuildEmojisUpdateEvent struct {
 	Shard   *Shard       `json:"-"`
 	GuildID ID           `json:"guild_id"`
 	Emojis  []GuildEmoji `json:"emojis"`
 }
 
+// Guild returns the guild where the emojis are being updated if it is cached.
+func (e *GuildEmojisUpdateEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
+}
+
 type GuildStickersUpdateEvent struct {
 	Shard    *Shard         `json:"-"`
 	GuildID  ID             `json:"guild_id"`
 	Stickers []GuildSticker `json:"stickers"`
+}
+
+// Guild returns the guild where the stickers are being updated if it is cached.
+func (e *GuildStickersUpdateEvent) Guild(cache *Cache) (Guild, bool) {
+	return cache.Guilds.Get(e.GuildID)
 }
 
 type UserUpdateEvent struct {
@@ -251,6 +350,8 @@ type ReadyGuild struct {
 	ID          ID
 	// Guild is the full guild if unavailable is false.
 	Guild *Guild
+	// Cached is the guild removed from cache if unavailable is true and it was cached.
+	Cached *Guild
 }
 
 type ShardResumedEvent struct {

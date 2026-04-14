@@ -38,62 +38,30 @@ type Guild struct {
 	DisabledOperations    GuildOperations            `json:"disabled_operations"`
 	MessageHistoryCutoff  *time.Time                 `json:"message_history_cutoff"`
 
-	Channels *Collection[Channel]      `json:"-"`
-	Roles    *Collection[Role]         `json:"-"`
-	Members  *Collection[Member]       `json:"-"`
-	Emojis   *Collection[GuildEmoji]   `json:"-"`
+	// Channels is the known channels of the guild.
+	// If the guild is cached, they will be automatically updated.
+	// If this information is not available, this will be nil.
+	Channels *Collection[Channel] `json:"-"`
+	// Roles is the known roles of the guild.
+	// If the guild is cached, they will be automatically updated.
+	// If this information is not available, this will be nil.
+	Roles *Collection[Role] `json:"-"`
+	// Members is the known members of the guild.
+	// If the guild is cached, they will be automatically updated.
+	// If this information is not available, this will be nil.
+	Members *Collection[Member] `json:"-"`
+	// Emojis is the known emojis of the guild.
+	// If the guild is cached, they will be automatically updated.
+	// If this information is not available, this will be nil.
+	Emojis *Collection[GuildEmoji] `json:"-"`
+	// Stickers is the known stickers of the guild.
+	// If the guild is cached, they will be automatically updated.
+	// If this information is not available, this will be nil.
 	Stickers *Collection[GuildSticker] `json:"-"`
 }
 
 func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
-}
-
-func newGuildForCache(cache *Cache) Guild {
-	var result Guild
-
-	if cache == nil {
-		channels := NewCollectionUnlimited[Channel]()
-		result.Channels = &channels
-
-		members := NewCollectionUnlimited[Member]()
-		result.Members = &members
-
-		roles := NewCollectionUnlimited[Role]()
-		result.Roles = &roles
-
-		emojis := NewCollectionUnlimited[GuildEmoji]()
-		result.Emojis = &emojis
-
-		stickers := NewCollectionUnlimited[GuildSticker]()
-		result.Stickers = &stickers
-	} else {
-		if cache.MakeGuild != nil {
-			result = cache.MakeGuild()
-		}
-
-		if result.Channels == nil {
-			result.Channels = new(Collection[Channel])
-		}
-
-		if result.Members == nil {
-			result.Members = new(Collection[Member])
-		}
-
-		if result.Roles == nil {
-			result.Roles = new(Collection[Role])
-		}
-
-		if result.Emojis == nil {
-			result.Emojis = new(Collection[GuildEmoji])
-		}
-
-		if result.Stickers == nil {
-			result.Stickers = new(Collection[GuildSticker])
-		}
-	}
-
-	return result
 }
 
 func (g *Guild) updateProperties(guild *Guild) {
@@ -110,47 +78,6 @@ func (g *Guild) updateProperties(guild *Guild) {
 	g.Members = oldMember
 	g.Emojis = oldEmojis
 	g.Stickers = oldStickers
-}
-
-type gatewayGuild struct {
-	Properties Guild          `json:"properties"`
-	Channels   []Channel      `json:"channels"`
-	Roles      []Role         `json:"roles"`
-	Members    []Member       `json:"members"`
-	Emojis     []GuildEmoji   `json:"emojis"`
-	Stickers   []GuildSticker `json:"stickers"`
-}
-
-func (g *Guild) updateGateway(guild *gatewayGuild, cache *Cache) {
-	g.updateProperties(&guild.Properties)
-
-	g.Channels.Clear()
-	for _, channel := range guild.Channels {
-		g.Channels.Set(channel.ID, channel)
-	}
-
-	g.Roles.Clear()
-	for _, role := range guild.Roles {
-		g.Roles.Set(role.ID, role)
-	}
-
-	g.Members.Clear()
-	for _, member := range guild.Members {
-		g.Members.Set(member.ID(), member)
-		if cache != nil {
-			member.updateCache(cache)
-		}
-	}
-
-	g.Emojis.Clear()
-	for _, emoji := range guild.Emojis {
-		g.Emojis.Set(emoji.ID, emoji)
-	}
-
-	g.Stickers.Clear()
-	for _, sticker := range guild.Stickers {
-		g.Stickers.Set(sticker.ID, sticker)
-	}
 }
 
 type GuildSplashCardAlignment uint
@@ -289,10 +216,6 @@ func (m *Member) DisplayName() string {
 	} else {
 		return m.User.DisplayName()
 	}
-}
-
-func (m *Member) updateCache(cache *Cache) {
-	cache.Users.Set(m.User.ID, m.User)
 }
 
 // Perms respresents a set of member permissions.

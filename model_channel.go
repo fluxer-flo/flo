@@ -89,8 +89,8 @@ func (c *Channel) CreateMessage(rest *REST, ctx context.Context, opts CreateMess
 	return rest.CreateMessage(ctx, c.ID, opts)
 }
 
-func (c *Channel) GetMessage(rest *REST, ctx context.Context, messageID ID) (Message, error) {
-	return rest.GetMessage(ctx, c.ID, messageID)
+func (c *Channel) GetMessage(rest *REST, ctx context.Context, msgID ID) (Message, error) {
+	return rest.GetMessage(ctx, c.ID, msgID)
 }
 
 func (c *Channel) updateProperties(channel *Channel) {
@@ -212,6 +212,9 @@ type Message struct {
 	ReferencedMessage *Message `json:"referenced_message"` // TODO: also add MessageSnaphots
 	// Call specifies the call the message represents if the type is [MessageTypeCall].
 	Call *MessageCall `json:"call"`
+	// Nonce is a string that can be set when creating a message and checked to verify it has been sent.
+	// This will only be present if the message was received over the gateway - so either in an event or the message cache.
+	Nonce *string `json:"nonce"`
 }
 
 func (m *Message) CreatedAt() time.Time {
@@ -220,6 +223,11 @@ func (m *Message) CreatedAt() time.Time {
 
 func (m *Message) IsDeletable() bool {
 	return m.Type.IsDeletable()
+}
+
+// Channel returns the channel the message was sent in which may or may not be cached.
+func (m *Message) Channel(cache *Cache) (Channel, bool) {
+	return cache.Channel(m.ChannelID)
 }
 
 func (m *Message) Edit(rest *REST, ctx context.Context, opts EditMessageOpts) error {
@@ -234,23 +242,6 @@ func (m *Message) Edit(rest *REST, ctx context.Context, opts EditMessageOpts) er
 
 func (m *Message) Delete(rest *REST, ctx context.Context) error {
 	return rest.DeleteMessage(ctx, m.ChannelID, m.ID)
-}
-
-func (m *Message) updateCache(cache *Cache) {
-	if m.WebhookID == nil {
-		cache.Users.Set(m.Author.ID, m.Author)
-	}
-
-	for _, user := range m.Mentions {
-		cache.Users.Set(user.ID, user)
-	}
-
-	if m.ReferencedMessage != nil {
-		referenced := *m.ReferencedMessage
-		// NOTE: prevent recursion, just in case
-		referenced.ReferencedMessage = nil
-		referenced.updateCache(cache)
-	}
 }
 
 type MessageType uint

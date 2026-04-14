@@ -15,7 +15,7 @@ func rateLimitReadGuild(guildID ID) RESTRateLimitConfig {
 }
 
 func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
-	result := newGuildForCache(r.Cache)
+	var result Guild
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "GET",
 		Path:      fmt.Sprintf("/v1/guilds/%d", guildID),
@@ -25,12 +25,6 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 		return Guild{}, err
 	}
 
-	if r.Cache != nil {
-		r.Cache.Guilds.Update(result.ID, func(cached *Guild) {
-			cached.updateProperties(&result)
-			result = *cached
-		})
-	}
-
+	cacheGuild(&result, r.Cache)
 	return result, nil
 }

@@ -26,21 +26,7 @@ func (r *REST) GetChannel(ctx context.Context, channelID ID) (Channel, error) {
 		return Channel{}, err
 	}
 
-	if r.Cache != nil {
-		if resp.GuildID != nil {
-			guild, ok := r.Cache.Guilds.Get(*resp.GuildID)
-			if ok {
-				guild.Channels.optUpsert(channelID, resp, func(cached *Channel) {
-					cached.updateProperties(&resp)
-				})
-			}
-		} else if resp.Type.IsPrivate() {
-			r.Cache.PrivateChannels.Upsert(channelID, resp, func(cached *Channel) {
-				cached.updateProperties(&resp)
-			})
-		}
-	}
-
+	cacheChannel(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -82,21 +68,7 @@ func (r *REST) EditChannel(ctx context.Context, channelID ID, opts EditChannelOp
 		return Channel{}, err
 	}
 
-	if r.Cache != nil {
-		if resp.GuildID != nil {
-			guild, ok := r.Cache.Guilds.Get(*resp.GuildID)
-			if ok {
-				guild.Channels.optUpsert(channelID, resp, func(cached *Channel) {
-					cached.updateProperties(&resp)
-				})
-			}
-		} else if resp.Type.IsPrivate() {
-			r.Cache.PrivateChannels.Upsert(channelID, resp, func(cached *Channel) {
-				cached.updateProperties(&resp)
-			})
-		}
-	}
-
+	cacheChannel(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -124,23 +96,18 @@ func rateLimitReadMessage(channelID ID) RESTRateLimitConfig {
 	}
 }
 
-func (r *REST) GetMessage(ctx context.Context, channelID ID, messageID ID) (Message, error) {
+func (r *REST) GetMessage(ctx context.Context, channelID ID, msgID ID) (Message, error) {
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
 		RateLimit: rateLimitReadMessage(channelID),
 	}, &resp)
 	if err != nil {
 		return Message{}, err
 	}
 
-	if r.Cache != nil {
-		if channel, ok := r.Cache.PrivateChannels.Get(resp.ChannelID); ok {
-			channel.Messages.optSet(resp.ID, resp)
-		}
-	}
-
+	cacheMessage(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -274,19 +241,7 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 		return Message{}, err
 	}
 
-	if r.Cache != nil {
-		resp.updateCache(r.Cache)
-
-		r.Cache.PrivateChannels.Update(channelID, func(channel *Channel) {
-			if channel.LastMessageID == nil ||
-				resp.ID.CreatedAt().After(channel.LastMessageID.CreatedAt()) {
-				lastMessageID := resp.ID
-				channel.LastMessageID = &lastMessageID
-			}
-			channel.Messages.optSet(channelID, resp)
-		})
-	}
-
+	cacheMessage(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -311,7 +266,7 @@ type EditAttachmentOpts struct {
 	Content io.ReadCloser `json:"-"`
 }
 
-func (r *REST) EditMessage(ctx context.Context, channelID ID, messageID ID, opts EditMessageOpts) (Message, error) {
+func (r *REST) EditMessage(ctx context.Context, channelID ID, msgID ID, opts EditMessageOpts) (Message, error) {
 	if opts.AllowedMentions == nil {
 		opts.AllowedMentions = r.DefaultAllowedMentions
 	}
@@ -341,7 +296,7 @@ func (r *REST) EditMessage(ctx context.Context, channelID ID, messageID ID, opts
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:    "PATCH",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
 		RateLimit: rateLimitCreateMessage(channelID),
 		Payload:   opts,
 		Form:      files,
@@ -350,10 +305,7 @@ func (r *REST) EditMessage(ctx context.Context, channelID ID, messageID ID, opts
 		return Message{}, err
 	}
 
-	if r.Cache != nil {
-		resp.updateCache(r.Cache)
-	}
-
+	cacheMessage(&resp, r.Cache)
 	return resp, nil
 
 }
@@ -366,10 +318,12 @@ func rateLimitDeleteMessage(channelID ID) RESTRateLimitConfig {
 	}
 }
 
-func (r *REST) DeleteMessage(ctx context.Context, channelID ID, messageID ID) error {
+func (r *REST) DeleteMessage(ctx context.Context, channelID ID, msgID ID) error {
+	uncacheMessage(channelID, msgID, r.Cache)
+
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:    "DELETE",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, messageID),
+		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
 		RateLimit: rateLimitDeleteMessage(channelID),
 	})
 }

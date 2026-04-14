@@ -58,7 +58,8 @@ func (c ColorInt) String() string {
 }
 
 // A Collection is a possibly-limited thread-safe set of Fluxer entities looked up by ID.
-// The zero value does not allow anything to be inserted.
+// The zero value has a limit of 0, so writes will be ignored.
+// A nil *Collection can be read, but writes will panic.
 // Assigning a new collection to an existing one is not a thread-safe operation.
 type Collection[T any] struct {
 	limit   int
@@ -155,6 +156,10 @@ func (c *Collection[T]) addToLRUTailAndEvict(id ID) *lruNode {
 
 // Limit returns the item limit if the collection is limited. Otherwise it returns -1, false.
 func (c *Collection[T]) Limit() (int, bool) {
+	if c == nil {
+		return 0, true
+	}
+
 	if c.limit >= 0 {
 		return c.limit, true
 	} else {
@@ -164,7 +169,7 @@ func (c *Collection[T]) Limit() (int, bool) {
 
 // Len returns the number of items in the collection.
 func (c *Collection[T]) Len() int {
-	if c.limit == 0 {
+	if c == nil || c.limit == 0 {
 		return 0
 	}
 
@@ -176,7 +181,7 @@ func (c *Collection[T]) Len() int {
 
 // IDs returns the item IDs in the collection. The order is effectively random.
 func (c *Collection[T]) IDs() []ID {
-	if c.limit == 0 {
+	if c == nil || c.limit == 0 {
 		return nil
 	}
 
@@ -198,7 +203,7 @@ func (c *Collection[T]) IDs() []ID {
 // Get returns a value in the collection by ID.
 // It marks the item as most recently used if a limit is set.
 func (c *Collection[T]) Get(id ID) (T, bool) {
-	if c.limit == 0 {
+	if c == nil || c.limit == 0 {
 		var t T
 		return t, false
 	}
@@ -241,19 +246,10 @@ func (c *Collection[T]) Get(id ID) (T, bool) {
 	}
 }
 
-func (c *Collection[T]) optGet(id ID) (T, bool) {
-	if c == nil {
-		var t T
-		return t, false
-	}
-
-	return c.Get(id)
-}
-
 // Contains returns true if an item with the specified ID is included in the collection.
 // It does not update the item's recency.
 func (c *Collection[T]) Contains(id ID) bool {
-	if c.limit == 0 {
+	if c == nil || c.limit == 0 {
 		return false
 	}
 
@@ -298,14 +294,6 @@ func (c *Collection[T]) Set(id ID, val T) {
 	c.lookup[id] = entry
 }
 
-func (c *Collection[T]) optSet(id ID, val T) {
-	if c == nil {
-		return
-	}
-
-	c.Set(id, val)
-}
-
 // Update allows safely updating the item with the specified ID from the collection through a pointer if it is present.
 // It marks the item as most recently used if a limit is set.
 // Copying the value is fine, but the pointer should not be copied outside the closure.
@@ -332,14 +320,6 @@ func (c *Collection[T]) Update(id ID, update func(val *T)) bool {
 
 	update(&entry.val)
 	return true
-}
-
-func (c *Collection[T]) optUpdate(id ID, update func(val *T)) bool {
-	if c == nil {
-		return false
-	}
-	
-	return c.Update(id, update)
 }
 
 // Upsert behaves like Update, but in the case where it returns false i.e. an item was not updated, it is added instead.
@@ -374,14 +354,6 @@ func (c *Collection[T]) Upsert(id ID, val T, update func(val *T)) bool {
 	return true
 }
 
-func (c *Collection[T]) optUpsert(id ID, val T, update func(val *T)) {
-	if c == nil {
-		return
-	}
-
-	c.Upsert(id, val, update)
-}
-
 // Delete removes the item with the specified ID from the collection.
 func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	if c.limit == 0 {
@@ -407,14 +379,6 @@ func (c *Collection[T]) Delete(id ID) (*T, bool) {
 	delete(c.lookup, id)
 	entry.lru = nil // avoid leaking
 	return &entry.val, true
-}
-
-func (c *Collection[T]) optDelete(id ID) (*T, bool) {
-	if c == nil {
-		return nil, false
-	}
-
-	return c.Delete(id)
 }
 
 // Clear removes all items from the collection.
