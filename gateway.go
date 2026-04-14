@@ -630,6 +630,7 @@ func (s *Shard) controlLoop(ctx context.Context) error {
 			if !s.heartbeatACK {
 				return fmt.Errorf("heartbeat not acknowledged (RIP)")
 			}
+			s.heartbeatACK = false
 
 			if s.pendingHeartRate != 0 {
 				s.heartbeat = time.Tick(s.pendingHeartRate)
@@ -1195,8 +1196,6 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 }
 
 func (s *Shard) sendHeartbeat() {
-	s.heartbeatACK = false
-
 	data := []byte("null")
 	if s.lastSeq != 0 {
 		data = fmt.Append(nil, s.lastSeq)
