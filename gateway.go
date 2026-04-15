@@ -226,6 +226,8 @@ type Shard struct {
 	outbound          chan GatewayPacket
 	readErr           chan error
 	writeErr          chan error
+	killRead          chan struct{}
+	killWrite         chan struct{}
 	heartbeat         <-chan time.Time
 	pendingHeartRate  time.Duration
 	lastHeartbeatSent time.Time
@@ -410,12 +412,12 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				if !stop {
 					slog.Debug(
 						"shard explicitly stopped before connect",
-						slog.Any("shard", s.ID),
+						slog.Any("shard", s.id),
 					)
 				} else {
 					slog.Debug(
 						"shard explicitly reconnected before connect",
-						slog.Any("shard", s.ID),
+						slog.Any("shard", s.id),
 					)
 
 					ctx, cancel = context.WithCancel(context.Background())
@@ -464,13 +466,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 				slog.Debug(
 					fmt.Sprintf("shard explicitly reconnected while establishing websocket connection; reconnecting in %s", sleepTime),
-					slog.Any("shard", s.ID),
+					slog.Any("shard", s.id),
 				)
 				continue
 			} else {
 				slog.Debug(
 					"shard explicitly stopped while establishing websocket connection",
-					slog.Any("shard", s.ID),
+					slog.Any("shard", s.id),
 				)
 				break
 			}
@@ -494,8 +496,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		s.conn = conn
 		s.inbound = make(chan GatewayPacket)
 		s.outbound = make(chan GatewayPacket, 1024)
-		s.readErr = make(chan error)
-		s.writeErr = make(chan error)
+		s.readErr = make(chan error, 1)
+		s.writeErr = make(chan error, 1)
+		s.killRead = make(chan struct{}, 1)
+		s.killWrite = make(chan struct{}, 1)
 		s.heartbeat = nil
 		s.heartbeatACK = true
 		s.pendingHeartRate = 0
@@ -528,13 +532,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 				slog.Debug(
 					fmt.Sprintf("shard explicitly disconnected; reconnecting in %s", sleepTime),
-					slog.Any("shard", s.ID),
+					slog.Any("shard", s.id),
 					slog.Bool("reconnect", reconnect),
 				)
 			} else {
 				slog.Debug(
 					"shard explicitly disconnected",
-					slog.Any("shard", s.ID),
+					slog.Any("shard", s.id),
 					slog.Bool("reconnect", reconnect),
 				)
 			}
@@ -555,22 +559,98 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				if reconnect {
 					slog.Warn(
 						fmt.Sprintf("websocket closed with %d %s; reconnecting in %s", closeErr.Code, closeErr.Text, sleepTime),
-						slog.Any("shard", s.ID),
+						slog.Any("shard", s.id),
 					)
 				} else {
 					slog.Warn(
 						fmt.Sprintf("websocket closed with %d %s; not reconnecting", closeErr.Code, closeErr.Text),
-						slog.Any("shard", s.ID),
+						slog.Any("shard", s.id),
 					)
 				}
 			} else {
 				reconnect = true
 				slog.Warn(
-					fmt.Sprintf("error with webhook connection; reconnecting in %s", sleepTime.String()),
-					slog.Any("shard", s.ID),
+					fmt.Sprintf("error with websocket connection; reconnecting in %s", sleepTime.String()),
+					slog.Any("shard", s.id),
 					slog.Any("err", disconnectErr),
 				)
 			}
+		}
+
+		if s.writeErr != nil {
+			// TODO: maybe we could allow a custom timeout or context
+			deadline := time.Now().Add(time.Second * 3)
+
+			s.killWrite <- struct{}{}
+
+			var err error
+			// wait for write task to finish up
+			select {
+			case err = <-s.writeErr:
+				s.writeErr = nil
+			case <-time.After(time.Until(deadline)):
+				slog.Warn("writing pending packet took long to send a close message", slog.Any("shard", s.id))
+			}
+
+			if err == nil && s.writeErr == nil && s.readErr != nil {
+				// we haven't had a read or write error, so send a polite goodbye message
+				closeCode := websocket.CloseNormalClosure
+				if disconnectErr != nil {
+					closeCode = websocket.CloseAbnormalClosure
+				}
+
+				slog.Debug(
+					"sending close message",
+					slog.Any("shard", s.id),
+					slog.Int("closeCode", closeCode),
+				)
+
+				err = s.conn.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(closeCode, "laters"),
+					deadline,
+				)
+				if err != nil {
+					slog.Warn(
+						"failed to send close message",
+						slog.Any("shard", s.id),
+						slog.Any("err", err),
+					)
+				}
+
+				select {
+				case err := <-s.readErr:
+					s.readErr = nil
+
+					var closed *websocket.CloseError
+					if !errors.As(err, &closed) || closed.Code != closeCode {
+						slog.Warn(
+							"got read error before close handshake completed",
+							slog.Any("shard", s.id),
+							slog.Any("err", err),
+						)
+					}
+
+					slog.Debug("close handshake complete", slog.Any("shard", s.id))
+				case <-time.After(time.Until(deadline)):
+					slog.Warn("close handshake timed out", slog.Any("shard", s.id))
+				}
+			}
+		}
+
+		err = s.conn.Close()
+		if err != nil {
+			slog.Warn(
+				"error closing websocket connection",
+				slog.Any("shard", s.id),
+				slog.Any("err", err),
+			)
+		}
+
+		if s.readErr != nil {
+			s.killRead <- struct{}{}
+			// wait for read task to finish up
+			<-s.readErr
 		}
 
 		event := ShardDisconnectedEvent{
@@ -579,15 +659,6 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		}
 		s.Disconnected.emit(event)
 		s.gateway.ShardDisconnected.emit(event)
-
-		err = s.conn.Close()
-		if err != nil {
-			slog.Warn(
-				"error closing webhook connection",
-				slog.Any("shard", s.ID),
-				slog.Any("err", err),
-			)
-		}
 
 		if !reconnect {
 			stopErr = disconnectErr
@@ -612,26 +683,39 @@ func (s *Shard) readLoop() {
 		var packet GatewayPacket
 		err = json.NewDecoder(reader).Decode(&packet)
 		if err != nil {
-			slog.Error("failed to decode packet", slog.Any("err", err))
-			continue
+			s.readErr <- err
+			return
 		}
 
-		s.inbound <- packet
+		select {
+		case <-s.killRead:
+			s.readErr <- nil
+			return
+		case s.inbound <- packet:
+		}
 	}
 }
 
 func (s *Shard) writeLoop() {
 	for {
-		packet := <-s.outbound
 		writer, err := s.conn.NextWriter(websocket.TextMessage)
 		if err != nil {
 			s.writeErr <- err
 			return
 		}
 
+		var packet GatewayPacket
+		select {
+		case <-s.killWrite:
+			s.writeErr <- nil
+			return
+		case packet = <-s.outbound:
+		}
+
 		err = json.NewEncoder(writer).Encode(packet)
 		if err != nil {
-			slog.Error("failed to encode packet", slog.Any("err", err))
+			s.writeErr <- err
+			return
 		}
 
 		err = writer.Close()
@@ -646,9 +730,11 @@ func (s *Shard) writeLoop() {
 func (s *Shard) controlLoop(ctx context.Context) error {
 	for {
 		select {
-		case err := <-s.writeErr:
-			return err
 		case err := <-s.readErr:
+			s.readErr = nil
+			return err
+		case err := <-s.writeErr:
+			s.writeErr = nil
 			return err
 		case packet := <-s.inbound:
 			err := s.handlePacket(packet)

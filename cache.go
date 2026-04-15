@@ -43,7 +43,7 @@ func NewCacheDefault() Cache {
 	const messageCount = 100
 
 	return Cache{
-		DMChannels: NewCollection[Channel](300),
+		DMChannels:      NewCollection[Channel](300),
 		GroupDMChannels: NewCollectionUnlimited[Channel](),
 		MakeDMChannel: func() Channel {
 			messages := NewCollection[Message](messageCount)
@@ -429,8 +429,10 @@ func uncacheGuild(guildID ID, cache *Cache) *Guild {
 	removed, _ := cache.Guilds.Delete(guildID)
 	cache.UnavailableGuilds.Set(guildID, struct{}{})
 
-	for channelID := range removed.Channels.IDs() {
-		cache.ChannelGuilds.Delete(channelID)
+	if removed != nil {
+		for channelID := range removed.Channels.IDs() {
+			cache.ChannelGuilds.Delete(channelID)
+		}
 	}
 
 	return removed
