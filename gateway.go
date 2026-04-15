@@ -848,7 +848,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		s.sessionID = raw.SessionID
 		if cache != nil {
-			cache.UpdateCurrentUser(raw.User)
+			cacheCurrentUser(&raw.User, cache)
 		}
 
 		event := ShardReadyEvent{

@@ -511,3 +511,12 @@ func uncacheMember(guildID ID, memberID ID, cache *Cache) *Member {
 	member, _ := guild.Members.Delete(memberID)
 	return member
 }
+
+func cacheCurrentUser(user *UserPrivate, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	cache.UpdateCurrentUser(*user)
+	cache.Users.Set(user.ID, user.User)
+}
