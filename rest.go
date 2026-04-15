@@ -342,17 +342,94 @@ type InstanceInfo struct {
 }
 
 type InstanceEndpoints struct {
-	API       *url.URL `json:"api"`
-	APIClient *url.URL `json:"api_client"`
-	APIPublic *url.URL `json:"api_public"`
-	Gateway   *url.URL `json:"gateway"`
-	Media     *url.URL `json:"media"`
-	StaticCDN *url.URL `json:"static_cdn"`
-	Marketing *url.URL `json:"marketing"`
-	Admin     *url.URL `json:"admin"`
-	Invite    *url.URL `json:"invite"`
-	Gift      *url.URL `json:"gift"`
-	WebApp    *url.URL `json:"webapp"`
+	API       *url.URL
+	APIClient *url.URL
+	APIPublic *url.URL
+	Gateway   *url.URL
+	Media     *url.URL
+	StaticCDN *url.URL
+	Marketing *url.URL
+	Admin     *url.URL
+	Invite    *url.URL
+	Gift      *url.URL
+	WebApp    *url.URL
+}
+
+func (e *InstanceEndpoints) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		API       string `json:"api"`
+		APIClient string `json:"api_client"`
+		APIPublic string `json:"api_public"`
+		Gateway   string `json:"gateway"`
+		Media     string `json:"media"`
+		StaticCDN string `json:"static_cdn"`
+		Marketing string `json:"marketing"`
+		Admin     string `json:"admin"`
+		Invite    string `json:"invite"`
+		Gift      string `json:"gift"`
+		WebApp    string `json:"webapp"`
+	}
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal raw InstanceEndpoints: %w", err)
+	}
+
+	e.API, err = url.Parse(raw.API)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.API: %w", err)
+	}
+
+	e.APIClient, err = url.Parse(raw.APIClient)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.APIClient: %w", err)
+	}
+
+	e.APIPublic, err = url.Parse(raw.APIPublic)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.APIPublic: %w", err)
+	}
+
+	e.Gateway, err = url.Parse(raw.Gateway)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Gateway: %w", err)
+	}
+
+	e.Media, err = url.Parse(raw.Media)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Media: %w", err)
+	}
+
+	e.StaticCDN, err = url.Parse(raw.StaticCDN)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.StaticCDN: %w", err)
+	}
+
+	e.Marketing, err = url.Parse(raw.Marketing)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Marketing: %w", err)
+	}
+
+	e.Admin, err = url.Parse(raw.Admin)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Admin: %w", err)
+	}
+
+	e.Invite, err = url.Parse(raw.Invite)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Invite: %w", err)
+	}
+
+	e.Gift, err = url.Parse(raw.Gift)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.Gift: %w", err)
+	}
+
+	e.WebApp, err = url.Parse(raw.WebApp)
+	if err != nil {
+		return fmt.Errorf("failed to parse InstanceEndpoints.WebApp: %w", err)
+	}
+
+	return nil
 }
 
 type InstanceCaptchaConfig struct {
@@ -387,12 +464,12 @@ type InstanceLimitConfig struct {
 }
 
 type InstanceLimitRule struct {
-	ID        string                    `json:"id"`
-	Filters   []InstanceLimitRuleFilter `json:"filters"`
-	Overrides map[string]int            `json:"overrides"`
+	ID        string                   `json:"id"`
+	Filters   InstanceLimitRuleFilters `json:"filters"`
+	Overrides map[string]int           `json:"overrides"`
 }
 
-type InstanceLimitRuleFilter struct {
+type InstanceLimitRuleFilters struct {
 	Traits        []string `json:"traits"`
 	GuildFeatures []string `json:"guildFeatures"`
 }
