@@ -4,7 +4,7 @@
 
 # Flo
 
-A cute Go library for making Fluxer bots/self-bots designed to be simple in implementation and usage!
+A cute Go library for making Fluxer bots/self-bots aiming to be simple in implementation and usage!
 More user-API specific things may be considered in the future, but that is likely more useful for custom clients which is not the current focus.
 
 Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang out!
