@@ -60,8 +60,40 @@ func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
+func (g *Guild) GetMember(ctx context.Context, rest *REST, userID ID) (Member, error) {
+	return rest.GetMember(ctx, g.ID, userID)
+}
+
+func (g *Guild) GetCurrentMember(ctx context.Context, rest *REST) (Member, error) {
+	return rest.GetCurrentMember(ctx, g.ID)
+}
+
 func (g *Guild) GetMembers(ctx context.Context, rest *REST, opts GetMembersOpts) ([]Member, error) {
 	return rest.GetMembers(ctx, g.ID, opts)
+}
+
+func (g *Guild) UpdateMember(ctx context.Context, rest *REST, userID ID, opts UpdateMemberOpts) (Member, error) {
+	return rest.UpdateMember(ctx, g.ID, userID, opts)
+}
+
+func (g *Guild) UpdateCurrentMember(ctx context.Context, rest *REST, opts UpdateCurrentMemberOpts) (Member, error) {
+	return rest.UpdateCurrentMember(ctx, g.ID, opts)
+}
+
+func (g *Guild) AddMemberRole(ctx context.Context, rest *REST, userID ID, roleID ID) error {
+	return rest.AddMemberRole(ctx, g.ID, userID, roleID)
+}
+
+func (g *Guild) AddMemberRoleWithReason(ctx context.Context, rest *REST, userID ID, roleID ID, reason string) error {
+	return rest.AddMemberRoleWithReason(ctx, g.ID, userID, roleID, reason)
+}
+
+func (g *Guild) RemoveMemberRole(ctx context.Context, rest *REST, userID ID, roleID ID) error {
+	return rest.RemoveMemberRole(ctx, g.ID, userID, roleID)
+}
+
+func (g *Guild) RemoveMemberRoleWithReason(ctx context.Context, rest *REST, userID ID, roleID ID, reason string) error {
+	return rest.RemoveMemberRoleWithReason(ctx, g.ID, userID, roleID, reason)
 }
 
 func (g *Guild) RemoveMember(ctx context.Context, rest *REST, userID ID) error {
@@ -86,6 +118,10 @@ func (g *Guild) RemoveBan(ctx context.Context, rest *REST, userID ID) error {
 
 func (g *Guild) RemoveBanWithReason(ctx context.Context, rest *REST, userID ID, reason string) error {
 	return rest.RemoveGuildBanWithReason(ctx, g.ID, userID, reason)
+}
+
+func (g *Guild) Leave(ctx context.Context, rest *REST) error {
+	return rest.LeaveGuild(ctx, g.ID)
 }
 
 func (g *Guild) updateProperties(guild *Guild) {

@@ -17,6 +17,7 @@ func rateLimitReadUser(userID ID) RESTRateLimitConfig {
 func (r *REST) GetUser(ctx context.Context, userID ID) (User, error) {
 	var result User
 	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
 		Path:      fmt.Sprintf("/v1/users/%d", userID),
 		RateLimit: rateLimitReadUser(userID),
 	}, &result)
@@ -40,6 +41,7 @@ var rateLimitGetUserSettings = RESTRateLimitConfig{
 func (r *REST) GetCurrentUser(ctx context.Context) (UserPrivate, error) {
 	var result UserPrivate
 	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
 		Path:      "/v1/users/@me",
 		RateLimit: rateLimitGetUserSettings,
 	}, &result)
@@ -49,4 +51,20 @@ func (r *REST) GetCurrentUser(ctx context.Context) (UserPrivate, error) {
 
 	cacheCurrentUser(&result, r.Cache)
 	return result, nil
+}
+
+func rateLimitLeaveGuild(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guilds:leave:%d", guildID),
+		Limit:  10,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) LeaveGuild(ctx context.Context, guildID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method:    "DELETE",
+		Path:      fmt.Sprintf("/v1/users/@me/guilds/%d", guildID),
+		RateLimit: rateLimitLeaveGuild(guildID),
+	})
 }

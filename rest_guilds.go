@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 )
 
@@ -69,7 +70,191 @@ func (r *REST) GetMembers(ctx context.Context, guildID ID, opts GetMembersOpts) 
 	return resp, nil
 }
 
-func rateLimitMemberRemove(guildID ID) RESTRateLimitConfig {
+func (r *REST) GetMember(ctx context.Context, guildID ID, userID ID) (Member, error) {
+	var resp Member
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
+		RateLimit: rateLimitGuildMembers(guildID),
+	}, &resp)
+	if err != nil {
+		return Member{}, err
+	}
+
+	cacheMember(guildID, &resp, r.Cache)
+	return resp, nil
+}
+
+func (r *REST) GetCurrentMember(ctx context.Context, guildID ID) (Member, error) {
+	var resp Member
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      fmt.Sprintf("/v1/guilds/%d/members/@me", guildID),
+		RateLimit: rateLimitGuildMembers(guildID),
+	}, &resp)
+	if err != nil {
+		return Member{}, err
+	}
+
+	cacheMember(guildID, &resp, r.Cache)
+	return resp, nil
+}
+
+type UpdateMemberOpts struct {
+	AuditLogReason    string     `json:"-"`
+	Nick              *string    `json:"nick,omitempty"`
+	Roles             []ID       `json:"roles,omitzero"`
+	Mute              *bool      `json:"mute,omitempty"`
+	Deaf              *bool      `json:"deaf,omitempty"`
+	CommDisabledUntil *time.Time `json:"communication_disabled_until,omitempty"`
+	TimeoutReason     *string    `json:"timeout_reason,omitempty"`
+	ChannelID         *ID        `json:"channel_id,omitempty"`
+}
+
+func rateLimitUpdateGuildMember(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guild:member:update:%d", guildID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) UpdateMember(ctx context.Context, guildID ID, userID ID, opts UpdateMemberOpts) (Member, error) {
+	var resp Member
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:         "PATCH",
+		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
+		RateLimit:      rateLimitUpdateGuildMember(guildID),
+		Payload:        opts,
+		AuditLogReason: opts.AuditLogReason,
+	}, &resp)
+	if err != nil {
+		return Member{}, err
+	}
+
+	cacheMember(guildID, &resp, r.Cache)
+	return resp, nil
+}
+
+type UpdateCurrentMemberOpts struct {
+	AuditLogReason    string     `json:"-"`
+	Nick              *string    `json:"nick,omitempty"`
+	Avatar            *string    `json:"avatar,omitempty"`
+	Banner            *string    `json:"banner,omitempty"`
+	Bio               *string    `json:"bio,omitempty"`
+	Pronouns          *string    `json:"pronouns,omitempty"`
+	AccentColor       *ColorInt  `json:"accent_color,omitempty"`
+	Mute              *bool      `json:"mute,omitempty"`
+	Deaf              *bool      `json:"deaf,omitempty"`
+	CommDisabledUntil *time.Time `json:"communication_disabled_until,omitempty"`
+	TimeoutReason     *string    `json:"timeout_reason,omitempty"`
+	ChannelID         *ID        `json:"channel_id,omitempty"`
+}
+
+func (r *REST) UpdateCurrentMember(ctx context.Context, guildID ID, opts UpdateCurrentMemberOpts) (Member, error) {
+	var resp Member
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:         "PATCH",
+		Path:           fmt.Sprintf("/v1/guilds/%d/members/@me", guildID),
+		RateLimit:      rateLimitUpdateGuildMember(guildID),
+		Payload:        opts,
+		AuditLogReason: opts.AuditLogReason,
+	}, &resp)
+	if err != nil {
+		return Member{}, err
+	}
+
+	cacheMember(guildID, &resp, r.Cache)
+	return resp, nil
+}
+
+func rateLimitAddGuildMemberRole(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guild:member:role:add:%d", guildID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) AddMemberRole(ctx context.Context, guildID ID, userID ID, roleID ID) error {
+	return r.AddMemberRoleWithReason(ctx, guildID, userID, roleID, "")
+}
+
+func (r *REST) AddMemberRoleWithReason(ctx context.Context, guildID ID, userID ID, roleID ID, reason string) error {
+	err := r.RequestNoContent(ctx, RESTRequest{
+		Method:         "PUT",
+		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d/roles/%d", guildID, userID, roleID),
+		RateLimit:      rateLimitAddGuildMemberRole(guildID),
+		AuditLogReason: reason,
+	})
+	if err != nil {
+		return err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Members != nil {
+				guild.Members.Update(userID, func(member *Member) {
+					oldRoles := member.Roles
+
+					// NOTE: cloning just to be extra thread-safe (or thread cautious..?)
+					member.Roles = make([]ID, 0, len(oldRoles)+1)
+					member.Roles = append(member.Roles, oldRoles...)
+					member.Roles = append(member.Roles, roleID)
+				})
+			}
+		}
+	}
+
+	return nil
+}
+
+func rateLimitRemoveMemberRole(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guild:member:role:remove:%d", guildID),
+		Limit:  20,
+		Window: 10 * time.Second,
+	}
+}
+
+func (r *REST) RemoveMemberRole(ctx context.Context, guildID ID, userID ID, roleID ID) error {
+	return r.RemoveMemberRoleWithReason(ctx, guildID, userID, roleID, "")
+}
+
+func (r *REST) RemoveMemberRoleWithReason(ctx context.Context, guildID ID, userID ID, roleID ID, reason string) error {
+	err := r.RequestNoContent(ctx, RESTRequest{
+		Method:         "DELETE",
+		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d/roles/%d", guildID, userID, roleID),
+		RateLimit:      rateLimitRemoveMemberRole(guildID),
+		AuditLogReason: reason,
+	})
+	if err != nil {
+		return err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Members != nil {
+				guild.Members.Update(userID, func(member *Member) {
+					oldRoles := member.Roles
+					idx := slices.Index(oldRoles, roleID)
+					if idx == -1 {
+						return
+					}
+
+					// NOTE: cloning just to be extra thread-safe (or thread cautious..?)
+					member.Roles = make([]ID, 0, len(oldRoles)-1)
+					member.Roles = append(member.Roles, oldRoles[:idx]...)
+					member.Roles = append(member.Roles, oldRoles[idx+1:]...)
+				})
+			}
+		}
+	}
+
+	return nil
+}
+
+func rateLimitRemoveMember(guildID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("guild:member:remove:%d", guildID),
 		Limit:  20,
@@ -85,7 +270,7 @@ func (r *REST) RemoveMemberWithReason(ctx context.Context, guildID ID, userID ID
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "DELETE",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
-		RateLimit:      rateLimitMemberRemove(guildID),
+		RateLimit:      rateLimitRemoveMember(guildID),
 		AuditLogReason: reason,
 	})
 }
@@ -135,7 +320,7 @@ func (r *REST) CreateGuildBan(ctx context.Context, guildID ID, userID ID, opts C
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "PUT",
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
-		RateLimit:      rateLimitMemberRemove(guildID),
+		RateLimit:      rateLimitRemoveMember(guildID),
 		Payload:        payload,
 		AuditLogReason: opts.AuditLogReason,
 	})
@@ -149,7 +334,7 @@ func (r *REST) RemoveGuildBanWithReason(ctx context.Context, guildID ID, userID 
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "DELETE",
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
-		RateLimit:      rateLimitMemberRemove(guildID),
+		RateLimit:      rateLimitRemoveMember(guildID),
 		AuditLogReason: reason,
 	})
 }
