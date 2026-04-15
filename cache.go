@@ -5,13 +5,18 @@ import "sync"
 // Cache specifies caching targets and configuration.
 // The zero value for Cache does not cache anything - use [NewCacheDefault] for generous defaults.
 type Cache struct {
-	// PrivateChannels is populated by non-guild private channels.
-	PrivateChannels Collection[Channel]
+	// DMChannels is populated by channels of type [ChannelTypeDM].
+	DMChannels Collection[Channel]
+	// MakeDMChannel is used to create new DM channel entries if it is not nil.
+	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
+	MakeDMChannel func() Channel
+	// DMChannels is populated by channels of type [ChannelTypeGroupDM].
+	GroupDMChannels Collection[Channel]
+	// MakeGroupDM is used to create new group DM channel entries if it is not nil.
+	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
+	MakeGroupDMChannel func() Channel
 	// ChannelGuilds is populated with a mapping from guild channel ID -> guild ID.
 	ChannelGuilds Collection[ID]
-	// MakePrivateChannel is used to create new private channel entries if it is not nil.
-	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
-	MakePrivateChannel func() Channel
 	// MakePrivateChannel is used to create new guild channel entries if it is not nil.
 	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
 	MakeGuildChannel func() Channel
@@ -35,16 +40,27 @@ type Cache struct {
 // NewCacheDefault returns a Cache which prioritises out-of-the-box usability.
 // The caching here is quite aggressive but tuning it by modifying the fields is encouraged.
 func NewCacheDefault() Cache {
+	const messageCount = 100
+
 	return Cache{
-		MakePrivateChannel: func() Channel {
-			messages := NewCollection[Message](100)
+		DMChannels: NewCollection[Channel](300),
+		GroupDMChannels: NewCollectionUnlimited[Channel](),
+		MakeDMChannel: func() Channel {
+			messages := NewCollection[Message](messageCount)
+
+			return Channel{
+				Messages: &messages,
+			}
+		},
+		MakeGroupDMChannel: func() Channel {
+			messages := NewCollection[Message](messageCount)
 
 			return Channel{
 				Messages: &messages,
 			}
 		},
 		MakeGuildChannel: func() Channel {
-			messages := NewCollection[Message](100)
+			messages := NewCollection[Message](messageCount)
 
 			return Channel{
 				Messages: &messages,
@@ -84,7 +100,16 @@ func (c *Cache) Channel(channelID ID) (Channel, bool) {
 		}
 	}
 
-	return c.PrivateChannels.Get(channelID)
+	if channel, ok := c.DMChannels.Get(channelID); ok {
+		return channel, true
+	}
+
+	if channel, ok := c.GroupDMChannels.Get(channelID); ok {
+		return channel, true
+	}
+
+	return Channel{}, false
+
 }
 
 func (c *Cache) UpdateChannel(channelID ID, update func(channel *Channel)) bool {
@@ -95,7 +120,15 @@ func (c *Cache) UpdateChannel(channelID ID, update func(channel *Channel)) bool 
 		}
 	}
 
-	return c.PrivateChannels.Update(channelID, update)
+	if c.DMChannels.Update(channelID, update) {
+		return true
+	}
+
+	if c.GroupDMChannels.Update(channelID, update) {
+		return true
+	}
+
+	return false
 }
 
 func (c *Cache) CurrentUser() (UserPrivate, bool) {
@@ -148,10 +181,19 @@ func initGuildChannelCollections(channel *Channel, cache *Cache) {
 	channel.Messages = template.Messages
 }
 
-func initPrivateChannelCollections(channel *Channel, cache *Cache) {
+func initDMChannelCollections(channel *Channel, cache *Cache) {
 	var template Channel
-	if cache.MakePrivateChannel != nil {
-		template = cache.MakePrivateChannel()
+	if cache.MakeDMChannel != nil {
+		template = cache.MakeDMChannel()
+	}
+
+	channel.Messages = template.Messages
+}
+
+func initGroupDMChannelCollections(channel *Channel, cache *Cache) {
+	var template Channel
+	if cache.MakeDMChannel != nil {
+		template = cache.MakeDMChannel()
 	}
 
 	channel.Messages = template.Messages
@@ -167,10 +209,21 @@ func cacheChannel(channel *Channel, cache *Cache) {
 		if ok {
 			cacheGuildChannel(&guild, channel, cache)
 		}
-	} else if channel.Type.IsPrivate() {
-		initPrivateChannelCollections(channel, cache)
+	} else if channel.Type == ChannelTypeDM {
+		initDMChannelCollections(channel, cache)
 
-		cache.PrivateChannels.Upsert(channel.ID, *channel, func(cached *Channel) {
+		cache.DMChannels.Upsert(channel.ID, *channel, func(cached *Channel) {
+			cached.updateProperties(channel)
+			*channel = *cached
+		})
+
+		for _, recipient := range channel.Recipients {
+			cache.Users.Set(recipient.ID, recipient)
+		}
+	} else if channel.Type == ChannelTypeGroupDM {
+		initGroupDMChannelCollections(channel, cache)
+
+		cache.GroupDMChannels.Upsert(channel.ID, *channel, func(cached *Channel) {
 			cached.updateProperties(channel)
 			*channel = *cached
 		})
@@ -210,8 +263,10 @@ func uncacheChannel(channel *Channel, cache *Cache) {
 		}
 
 		cache.ChannelGuilds.Delete(channel.ID)
-	} else if channel.Type.IsPrivate() {
-		cache.PrivateChannels.Delete(channel.ID)
+	} else if channel.Type == ChannelTypeDM {
+		cache.DMChannels.Delete(channel.ID)
+	} else if channel.Type == ChannelTypeGroupDM {
+		cache.GroupDMChannels.Delete(channel.ID)
 	}
 }
 
@@ -373,6 +428,10 @@ func uncacheGuild(guildID ID, cache *Cache) *Guild {
 
 	removed, _ := cache.Guilds.Delete(guildID)
 	cache.UnavailableGuilds.Set(guildID, struct{}{})
+
+	for channelID := range removed.Channels.IDs() {
+		cache.ChannelGuilds.Delete(channelID)
+	}
 
 	return removed
 }
