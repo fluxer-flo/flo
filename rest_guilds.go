@@ -30,18 +30,6 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	return result, nil
 }
 
-type CreateGuildBanOpts struct {
-	// DeleteMessageDays is the days worth of messages to delete (0-7).
-	DeleteMessageDays uint
-	// Reason specifies the reason which appears in the ban list.
-	Reason string
-	// AuditLogReason specifies an audit-log specific reason which does not persist.
-	AuditLogReason string
-	// BanDuration specifies how long to ban the user for if not 0.
-	// It is converted to seconds so anything more precise will be lost.
-	BanDuration time.Duration
-}
-
 type GetMembersOpts struct {
 	// Limit is specified as limit=... in the URL if not 0.
 	Limit int
@@ -122,15 +110,27 @@ func (r *REST) GetGuildBans(ctx context.Context, guildID ID) ([]GuildBan, error)
 	return resp, nil
 }
 
+type CreateGuildBanOpts struct {
+	// DeleteMessageDays is the days worth of messages to delete (0-7).
+	DeleteMessageDays uint
+	// Reason specifies the reason which appears in the ban list.
+	Reason string
+	// AuditLogReason specifies an audit-log specific reason which does not persist.
+	AuditLogReason string
+	// BanDuration specifies how long to ban the user for if not 0.
+	// It is converted to seconds so anything more precise will be lost.
+	BanDuration time.Duration
+}
+
 func (r *REST) CreateGuildBan(ctx context.Context, guildID ID, userID ID, opts CreateGuildBanOpts) error {
 	var payload struct {
-		DeleteMessageDays uint   `json:"delete_message_days,omitempty"`
-		Reason            string `json:"reason,omitempty"`
-		BanDuration       int64  `json:"ban_duration,omitempty"`
+		DeleteMessageDays  uint   `json:"delete_message_days,omitempty"`
+		Reason             string `json:"reason,omitempty"`
+		BanDurationSeconds int64  `json:"ban_duration_seconds,omitempty"`
 	}
 	payload.DeleteMessageDays = opts.DeleteMessageDays
 	payload.Reason = opts.Reason
-	payload.BanDuration = int64(opts.BanDuration / time.Second)
+	payload.BanDurationSeconds = int64(opts.BanDuration / time.Second)
 
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "PUT",
