@@ -1,3 +1,7 @@
+
+> [!IMPORTANT]  
+> This is a heavy work in progress! I am making this public since it is already at a stage where it is somewhat interesting, but the API coverage is low, ratelimiting is not necessarily that reliable and gracefully disconnecting from the websocket is not yet possible 
+
 # Flo
 
 A cute Go library for making Fluxer bots/self-bots designed to be simple in implementation and usage!
@@ -13,7 +17,9 @@ Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang
   - Another approach is typed IDs, but this has its downsides - at least taking the approach of [arikawa](https://github.com/diamondburned/arikawa/blob/v3/discord/snowflake_types.go) which duplicates code and uses codegen.
 
 ## See also
-- [FluxerGo](https://github.com/fluxergo/fluxergo) - Port of [DisGo](https://github.com/disgoorg/disgo) to Fluxer (more modular)
+- [FluxerGo](https://github.com/fluxergo/fluxergo) - Port of [DisGo](https://github.com/disgoorg/disgo) to Fluxer
+  - Split up into several packages which may be more your style
+  - Still has a lot of Discord stuff that needs to removed/changed :(
 
 ## Example
 
