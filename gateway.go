@@ -1344,10 +1344,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			return fmt.Errorf("failed to unmarshal USER_UPDATE data: %w", err)
 		}
 
-		if cache != nil {
-			cache.UpdateCurrentUser(event.UserPrivate)
-		}
-
+		cacheCurrentUser(&event.UserPrivate, cache)
 		s.gateway.UserUpdate.emit(event)
 	default:
 		slog.Warn("don't know how to handle event " + *packet.Event)
