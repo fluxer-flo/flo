@@ -12,7 +12,7 @@ Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang
 ## Features
 - Rate limiting
 - Caching
-- Sharding (even though Fluxer doesn't actually support it yet!)
+- API designed with sharding in mind (minimal changes should be needed to properly support sharding when it is available)
 - Cache and REST methods on objects for slightly more type safety
   - Another approach is typed IDs, but this has its downsides - at least taking the approach of [arikawa](https://github.com/diamondburned/arikawa/blob/v3/discord/snowflake_types.go) which duplicates code and uses codegen.
 
