@@ -653,6 +653,11 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			<-s.readErr
 		}
 
+		if s.writeErr != nil {
+			// we already signalled to killWrite - we just gave up waiting
+			<-s.writeErr
+		}
+
 		event := ShardDisconnectedEvent{
 			Err:          disconnectErr,
 			Reconnecting: reconnect,
