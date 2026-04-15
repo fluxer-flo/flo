@@ -495,12 +495,6 @@ func (e *GuildEmoji) Render() string {
 	}
 }
 
-func (e *GuildEmoji) updateWithoutUser(emoji *GuildEmoji) {
-	oldUser := e.User
-	*e = *emoji
-	e.User = oldUser
-}
-
 // GuildSticker reperesents a custom sticker in a guild.
 type GuildSticker struct {
 	ID          ID       `json:"id"`
