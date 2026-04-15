@@ -329,6 +329,126 @@ func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 	return io.NopCloser(&buf), contentType, nil
 }
 
+type InstanceInfo struct {
+	APICodeVersion int                     `json:"api_code_version"`
+	Endpoints      InstanceEndpoints       `json:"endpoints"`
+	Captcha        InstanceCaptchaConfig   `json:"captcha"`
+	Features       InstanceFeatures        `json:"features"`
+	GIF            InstanceGIFConfig       `json:"gif"`
+	SSO            InstanceSSOConfig       `json:"sso"`
+	Limits         InstanceLimitConfig     `json:"limits"`
+	Push           InstancePushNotifConfig `json:"push"`
+	AppPublic      InstanceAppPublicConfig `json:"app_public"`
+}
+
+type InstanceEndpoints struct {
+	API       *url.URL `json:"api"`
+	APIClient *url.URL `json:"api_client"`
+	APIPublic *url.URL `json:"api_public"`
+	Gateway   *url.URL `json:"gateway"`
+	Media     *url.URL `json:"media"`
+	StaticCDN *url.URL `json:"static_cdn"`
+	Marketing *url.URL `json:"marketing"`
+	Admin     *url.URL `json:"admin"`
+	Invite    *url.URL `json:"invite"`
+	Gift      *url.URL `json:"gift"`
+	WebApp    *url.URL `json:"webapp"`
+}
+
+type InstanceCaptchaConfig struct {
+	Provider         string  `json:"provider"`
+	HCaptchaSiteKey  *string `json:"hcaptcha_site_key"`
+	TurnstileSiteKey *string `json:"turnstile_site_key"`
+}
+
+type InstanceFeatures struct {
+	SMSMFAEnabled       bool `json:"sms_mfa_enabled"`
+	VoiceEnabled        bool `json:"voice_enabled"`
+	StripeEnabled       bool `json:"stripe_enabled"`
+	SelfHosted          bool `json:"self_hosted"`
+	ManualReviewEnabled bool `json:"manual_review_enabled"`
+}
+
+type InstanceGIFConfig struct {
+	Provider string `json:"provider"`
+}
+
+type InstanceSSOConfig struct {
+	Enabled     bool    `json:"enabled"`
+	Enforced    bool    `json:"enforced"`
+	DisplayName *string `json:"display_name"`
+	RedirectURI string  `json:"redirect_uri"`
+}
+
+type InstanceLimitConfig struct {
+	TraitDefinitions []string
+	Rules            []InstanceLimitRule
+	DefaultsHash     string
+}
+
+type InstanceLimitRule struct {
+	ID        string                    `json:"id"`
+	Filters   []InstanceLimitRuleFilter `json:"filters"`
+	Overrides map[string]int            `json:"overrides"`
+}
+
+type InstanceLimitRuleFilter struct {
+	Traits        []string `json:"traits"`
+	GuildFeatures []string `json:"guildFeatures"`
+}
+
+func (c *InstanceLimitConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Version          int                 `json:"version"`
+		TraitDefinitions []string            `json:"traitDefinitions"`
+		Rules            []InstanceLimitRule `json:"rules"`
+		DefaultsHash     string              `json:"defaultsHash"`
+	}
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal raw InstanceLimitConfig: %w", err)
+	}
+
+	if raw.Version != 2 {
+		return fmt.Errorf("InstanceLimitConfig version %d not supported", raw.Version)
+	}
+
+	*c = InstanceLimitConfig{
+		TraitDefinitions: raw.TraitDefinitions,
+		Rules:            raw.Rules,
+		DefaultsHash:     raw.DefaultsHash,
+	}
+	return nil
+}
+
+type InstancePushNotifConfig struct {
+	PublicVAPIDKey *string `json:"public_vapid_key"`
+}
+
+type InstanceAppPublicConfig struct {
+	SentryDSN *string `json:"sentry_dsn"`
+}
+
+var rateLimitInstanceInfo = RESTRateLimitConfig{
+	Bucket: "instance:info",
+	Limit:  60,
+	Window: time.Minute,
+}
+
+func (r *REST) GetInstanceInfo(ctx context.Context) (InstanceInfo, error) {
+	var resp InstanceInfo
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "GET",
+		Path:      "/v1/.well-known/fluxer",
+		RateLimit: rateLimitInstanceInfo,
+	}, &resp)
+	if err != nil {
+		return InstanceInfo{}, err
+	}
+
+	return resp, nil
+}
+
 // RESTAPIError represents an API error from Fluxer in the expected format.
 type RESTAPIError struct {
 	Path    string
