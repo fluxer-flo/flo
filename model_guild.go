@@ -60,6 +60,14 @@ func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
+func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildChannelOpts) (Channel, error) {
+	return rest.CreateGuildChannel(ctx, g.ID, opts)
+}
+
+func (g *Guild) CreateRole(ctx context.Context, rest *REST, opts CreateRoleOpts) (Role, error) {
+	return rest.CreateRole(ctx, g.ID, opts)
+}
+
 func (g *Guild) GetMember(ctx context.Context, rest *REST, userID ID) (Member, error) {
 	return rest.GetMember(ctx, g.ID, userID)
 }

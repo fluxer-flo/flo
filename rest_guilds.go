@@ -31,6 +31,75 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	return result, nil
 }
 
+type CreateGuildChannelOpts struct {
+	Type     ChannelType `json:"type"`
+	Name     string      `json:"name,omitempty"`
+	Topic    string      `json:"topic,omitempty"`
+	URL      string      `json:"url,omitempty"`
+	ParentID ID          `json:"parent_id,omitempty"`
+	Bitrate  int         `json:"bitrate,omitzero"`
+	NSFW     bool        `json:"nsfw,omitzero"`
+}
+
+func rateLimitCreateGuildChannel(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guild:channel:create:%d", guildID),
+		Limit:  10,
+		Window: 1 * time.Minute,
+	}
+}
+
+func (r *REST) CreateGuildChannel(ctx context.Context, guildID ID, opts CreateGuildChannelOpts) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "POST",
+		Path:      fmt.Sprintf("/v1/guilds/%d/channels", guildID),
+		RateLimit: rateLimitCreateGuildChannel(guildID),
+		Payload:   opts,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	cacheChannel(&resp, r.Cache)
+	return resp, nil
+}
+
+type CreateRoleOpts struct {
+	Name  string   `json:"name"`
+	Color ColorInt `json:"color"`
+	Perms *Perms   `json:"permissions,omitempty"`
+}
+
+func rateLimitCreateGuildRole(guildID ID) RESTRateLimitConfig {
+	return RESTRateLimitConfig{
+		Bucket: fmt.Sprintf("guild:role:create:%d", guildID),
+		Limit:  10,
+		Window: 1 * time.Minute,
+	}
+}
+
+func (r *REST) CreateRole(ctx context.Context, guildID ID, opts CreateRoleOpts) (Role, error) {
+	var resp Role
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "POST",
+		Path:      fmt.Sprintf("/v1/guilds/%d/roles", guildID),
+		RateLimit: rateLimitCreateGuildRole(guildID),
+		Payload:   opts,
+	}, &resp)
+	if err != nil {
+		return Role{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			guild.Roles.Set(resp.ID, resp)
+		}
+	}
+
+	return resp, nil
+}
+
 type GetMembersOpts struct {
 	// Limit is specified as limit=... in the URL if not 0.
 	Limit int

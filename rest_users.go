@@ -53,6 +53,34 @@ func (r *REST) GetCurrentUser(ctx context.Context) (UserPrivate, error) {
 	return result, nil
 }
 
+var rateLimitUserChannels = RESTRateLimitConfig{
+	Bucket: "user:channels",
+	Limit:  40,
+	Window: 10 * time.Second,
+}
+
+func (r *REST) CreateDMChannel(ctx context.Context, userID ID) (Channel, error) {
+	var raw struct {
+		RecipientID ID `json:"recipient_id"`
+	}
+	raw.RecipientID = userID
+
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:    "POST",
+		Path:      "/v1/users/@me/channels",
+		Payload:   raw,
+		RateLimit: rateLimitUserChannels,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	cacheChannel(&resp, r.Cache)
+	return resp, nil
+
+}
+
 func rateLimitLeaveGuild(guildID ID) RESTRateLimitConfig {
 	return RESTRateLimitConfig{
 		Bucket: fmt.Sprintf("guilds:leave:%d", guildID),
