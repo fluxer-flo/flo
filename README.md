@@ -24,61 +24,75 @@ Join our [Fluxer Community](https://fluxer.gg/bhvnuLCK) to get help or just hang
 ## Example
 
 ```go
-token := os.Getenv("FLUXER_TOKEN")
-if token == "" {
-    slog.Error("please provide the token as FLUXER_TOKEN")
-    os.Exit(1)
-}
-// you need this prefix for bot tokens!
-token = "Bot " + token
+package main
 
-cache := flo.NewCacheDefault()
-// if you want to change the limit or avoid caching something entirely:
-// cache.Guilds = flo.NewCollection[Guild](0)
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
 
-// REST is used to perform actions through Fluxer's REST HTTP API
-rest := flo.REST{
-    Auth:  token,
-    Cache: &cache,
-}
+	"github.com/fluxer-flo/flo"
+)
 
-// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
-gateway := flo.Gateway{
-    Auth:  token,
-    Cache: &cache,
-}
+func main() {
+	token := os.Getenv("FLUXER_TOKEN")
+	if token == "" {
+		slog.Error("please provide the token as FLUXER_TOKEN")
+		os.Exit(1)
+	}
+	// you need this prefix for bot tokens!
+	token = "Bot " + token
 
-gateway.ShardReady.OnceSync(func(r flo.ReadyEvent) {
-    fmt.Println("ready as " + r.User.Tag())
-})
+	cache := flo.NewCacheDefault()
+	// if you want to change the limit or avoid caching something entirely:
+	// cache.Guilds = flo.NewCollection[Guild](0)
 
-gateway.MessageCreate.On(func(m flo.MessageCreateEvent) {
-    var resp string
-    if m.Content == "!ping" {
-        resp = "Ping!"
-    } else if m.Content == "!pong" {
-        resp = "Pong!"
-    } else {
-        return
-    }
+	// REST is used to perform actions through Fluxer's REST HTTP API
+	rest := flo.REST{
+		Auth:  token,
+		Cache: &cache,
+	}
 
-    _, err := rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
-        Content: resp,
-        // reply to the original message
-        MessageReference: flo.MessageReferenceOpts{
-            MessageID: m.ID,
-        },
-    })
-    if err != nil {
-        slog.Warn("couldn't reply to command :/", slog.Any("err", err))
-    }
-})
+	// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
+	gateway := flo.Gateway{
+		Auth:  token,
+		Cache: &cache,
+	}
 
-gateway.Connect()
+	gateway.ShardReady.OnceSync(func(r flo.ShardReadyEvent) {
+		fmt.Println("ready as " + r.User.Tag())
+	})
 
-stopped, _ := gateway.ShardStopped.OnceChan()
-event := <-stopped
-if event.Err != nil {
-    slog.Error("stopped with error", slog.Any("err", event.Err))
+	gateway.MessageCreate.On(func(m flo.MessageCreateEvent) {
+		var resp string
+		switch m.Content {
+		case "!ping":
+			resp = "Pong!"
+		case "!pong":
+			resp = "Ping!"
+		default:
+			return
+		}
+
+		_, err := rest.CreateMessage(context.TODO(), m.ChannelID, flo.CreateMessageOpts{
+			Content: resp,
+			// reply to the original message
+			MessageReference: flo.MessageReferenceOpts{
+				MessageID: m.ID,
+			},
+		})
+		if err != nil {
+			slog.Warn("couldn't reply to command :/", slog.Any("err", err))
+		}
+	})
+
+	gateway.Start()
+
+	stopped, _ := gateway.ShardStopped.OnceChan()
+	event := <-stopped
+	if event.Err != nil {
+		slog.Error("stopped with error", slog.Any("err", event.Err))
+	}
 }
 ```
