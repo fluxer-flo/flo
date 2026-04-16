@@ -60,6 +60,30 @@ func (g *Guild) CreatedAt() time.Time {
 	return g.ID.CreatedAt()
 }
 
+// ResolvePerms resolves the permissions from the roles which are available in [Guild.Roles].
+// If a Role is not available, it will be ignored.
+func (g *Guild) ResolvePerms(member Member) Perms {
+	if member.ID() == g.OwnerID {
+		return PermsAll
+	}
+
+	var result Perms
+	for _, roleID := range member.Roles {
+		role, ok := g.Roles.Get(roleID)
+		if !ok {
+			continue
+		}
+
+		if role.Perms.Has(PermAdministrator) {
+			return PermsAll
+		}
+
+		result = result.Union(role.Perms)
+	}
+
+	return result
+}
+
 func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildChannelOpts) (Channel, error) {
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }
@@ -329,6 +353,44 @@ var (
 	PermPinMembers          = NewPermsBit(51)
 	PermBypassSlowmode      = NewPermsBit(52)
 	PermUpdateRTCRegion     = NewPermsBit(53)
+	PermsAll                = NewPerms(
+		PermCreateInstantInvite,
+		PermKickMembers,
+		PermBanMembers,
+		PermAdministrator,
+		PermManageChannels,
+		PermManageGuild,
+		PermAddReactions,
+		PermViewAuditLog,
+		PermPrioritySpeaker,
+		PermStream,
+		PermViewChannel,
+		PermSendMessages,
+		PermSendTTSMessages,
+		PermManageMessages,
+		PermEmbedLinks,
+		PermAttachFiles,
+		PermReadMessageHistory,
+		PermMentionEveryone,
+		PermUseExternalEmojis,
+		PermConnect,
+		PermSpeak,
+		PermMuteMembers,
+		PermDeafenMembers,
+		PermMoveMembers,
+		PermUseVAD,
+		PermChangeNickname,
+		PermManageNicknames,
+		PermManageRoles,
+		PermManageWebhooks,
+		PermManageExpressions,
+		PermUseExternalStickers,
+		PermModerateMembers,
+		PermCreateExpressions,
+		PermPinMembers,
+		PermBypassSlowmode,
+		PermUpdateRTCRegion,
+	)
 )
 
 // NewPerms creates permissions as a combination of all provided permissions.

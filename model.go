@@ -26,6 +26,11 @@ func NewID(timestamp time.Time) ID {
 	return ID((timestamp.Sub(idEpoch).Milliseconds()) << 22)
 }
 
+func ParseID(s string) (ID, error) {
+	i, err := strconv.ParseUint(s, 10, 64)
+	return ID(i), err
+}
+
 func (id ID) CreatedAt() time.Time {
 	return idEpoch.Add(time.Millisecond * time.Duration(id>>22))
 }
@@ -40,12 +45,12 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 	}
 
 	unquoted := data[1 : len(data)-1]
-	result, err := strconv.ParseUint(string(unquoted), 10, 64)
+	result, err := ParseID(string(unquoted))
 	if err != nil {
 		return err
 	}
 
-	*id = ID(result)
+	*id = result
 	return nil
 }
 
