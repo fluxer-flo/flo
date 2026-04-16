@@ -35,7 +35,7 @@ type REST struct {
 
 	bucketsMu sync.Mutex
 	// leaks a very small amount of memory B)
-	buckets map[string]*sync.Mutex
+	buckets map[string]chan struct{}
 }
 
 var defaultAPIURL = func() *url.URL {
@@ -135,24 +135,30 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 	closeFiles()
 	closedFiles = true
 
-	var bucket *sync.Mutex
+	// basically a mutex but using a channel so we can cancel
+	var bucket chan struct{}
 	if req.Bucket != "" {
 		r.bucketsMu.Lock()
 		if r.buckets == nil {
-			r.buckets = map[string]*sync.Mutex{}
+			r.buckets = map[string]chan struct{}{}
 		}
 
 		bucket = r.buckets[req.Bucket]
 		if bucket == nil {
-			bucket = new(sync.Mutex)
+			bucket = make(chan struct{}, 1)
+			bucket <- struct{}{} // it's new so unlock it right away
 			r.buckets[req.Bucket] = bucket
 		}
 		r.bucketsMu.Unlock()
 
-		bucket.Lock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-bucket:
+		}
 		defer func() {
 			if bucket != nil {
-				bucket.Unlock()
+				bucket <- struct{}{}
 			}
 		}()
 	}
@@ -181,7 +187,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 			b := bucket
 			go func() {
 				time.Sleep(time.Until(time.Unix(reset, 0)))
-				b.Unlock()
+				b <- struct{}{}
 			}()
 			bucket = nil
 		}
