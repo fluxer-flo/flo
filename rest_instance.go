@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"time"
 )
 
 type InstanceInfo struct {
@@ -185,18 +184,12 @@ type InstanceAppPublicConfig struct {
 	SentryDSN *string `json:"sentry_dsn"`
 }
 
-var rateLimitInstanceInfo = RESTRateLimitConfig{
-	Bucket: "instance:info",
-	Limit:  60,
-	Window: time.Minute,
-}
-
 func (r *REST) GetInstanceInfo(ctx context.Context) (InstanceInfo, error) {
 	var resp InstanceInfo
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      "/v1/.well-known/fluxer",
-		RateLimit: rateLimitInstanceInfo,
+		Method: "GET",
+		Path:   "/v1/.well-known/fluxer",
+		Bucket: "instance:info",
 	}, &resp)
 	if err != nil {
 		return InstanceInfo{}, err

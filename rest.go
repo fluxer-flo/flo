@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -32,8 +33,9 @@ type REST struct {
 	// DefaultAllowedMentions specifies the default allowed mentions if nothing is specified when creating or editing a message.
 	DefaultAllowedMentions *AllowedMentions
 
-	buckets   map[RESTRateLimitConfig]rateLimitBucket
 	bucketsMu sync.Mutex
+	// leaks a very small amount of memory B)
+	buckets map[string]*sync.Mutex
 }
 
 var defaultAPIURL = func() *url.URL {
@@ -46,10 +48,10 @@ var defaultAPIURL = func() *url.URL {
 }()
 
 type RESTRequest struct {
-	Method    string
-	Path      string
-	Query     string
-	RateLimit RESTRateLimitConfig
+	Method string
+	Path   string
+	Query  string
+	Bucket string
 
 	// Payload specifies a JSON body.
 	// If used in combination with Form, it will be added as payload_json.
@@ -67,16 +69,6 @@ type RESTFormField struct {
 	// Content has the content copied from it into the form body.
 	// It can be assumed to be closed after it is passed into Request.
 	Content io.ReadCloser
-}
-
-// RESTRateLimitConfig specifies options to be used to rate limit the request together with other requests using the same config..
-// If bucket is not provided, the request will not be rate limited.
-// Appropriate rate limit configs can easily be found within [the Fluxer backend] at the time of writing.
-// [the Fluxer backend]: https://github.com/fluxerapp/fluxer/tree/refactor/packages/api/src/rate_limit_configs
-type RESTRateLimitConfig struct {
-	Bucket string
-	Limit  int
-	Window time.Duration
 }
 
 // Request sends a Request to a Fluxer endpoint. If the returned error is nil, the response body should be closed.
@@ -140,19 +132,59 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
 
-	if req.RateLimit.Bucket != "" {
-		err := r.acquireBucketSlot(ctx, req.RateLimit)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	closeFiles()
 	closedFiles = true
+
+	var bucket *sync.Mutex
+	if req.Bucket != "" {
+		r.bucketsMu.Lock()
+		if r.buckets == nil {
+			r.buckets = map[string]*sync.Mutex{}
+		}
+
+		bucket = r.buckets[req.Bucket]
+		if bucket == nil {
+			bucket = new(sync.Mutex)
+			r.buckets[req.Bucket] = bucket
+		}
+		r.bucketsMu.Unlock()
+
+		bucket.Lock()
+		defer func() {
+			if bucket != nil {
+				bucket.Unlock()
+			}
+		}()
+	}
 
 	resp, err := r.Client.Do(httpReq)
 	if err != nil {
 		return nil, err
+	}
+
+	rateLimitRemaining := resp.Header.Get("X-RateLimit-Remaining")
+	rateLimitReset := resp.Header.Get("X-RateLimit-Reset")
+	if rateLimitRemaining != "" && rateLimitReset != "" {
+		remaining, err := strconv.ParseInt(rateLimitRemaining, 10, 64)
+		if err != nil {
+			resp.Body.Close()
+			return nil, errors.New("could not parse X-RateLimit-Remaining")
+		}
+			
+		reset, err := strconv.ParseInt(rateLimitReset, 10, 64)
+		if err != nil {
+			resp.Body.Close()
+			return nil, errors.New("could not parse X-RateLimit-Reset")
+		}
+
+		if remaining == 0 && bucket != nil {
+			b := bucket
+			go func() {
+				time.Sleep(time.Until(time.Unix(reset, 0)))
+				b.Unlock()
+			}()
+			bucket = nil
+		}
 	}
 
 	if resp.StatusCode >= 400 && resp.StatusCode <= 599 {
@@ -232,52 +264,6 @@ func (r *REST) RequestNoContent(ctx context.Context, req RESTRequest) error {
 
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("expected 204 No Content but got %s", resp.Status)
-	}
-
-	return nil
-}
-
-type rateLimitBucket struct {
-	filled    int
-	leakStart time.Time
-}
-
-// acquireBucketSlot acquires a slot in the rate limit bucket, pausing if necessary.
-// An error is returned if the passed context is cancelled.
-func (r *REST) acquireBucketSlot(ctx context.Context, conf RESTRateLimitConfig) error {
-	r.bucketsMu.Lock()
-
-	if r.buckets == nil {
-		r.buckets = map[RESTRateLimitConfig]rateLimitBucket{}
-	}
-
-	bucket := r.buckets[conf]
-
-	rn := time.Now()
-
-	leakRate := conf.Window / time.Duration(conf.Limit)
-	effectiveFilled := bucket.filled - int(rn.Sub(bucket.leakStart)/leakRate)
-
-	if effectiveFilled <= 0 {
-		effectiveFilled = 0
-		bucket.leakStart = time.Now()
-	}
-
-	bucket.filled++
-	effectiveFilled++
-
-	r.buckets[conf] = bucket
-	r.bucketsMu.Unlock()
-
-	if effectiveFilled > conf.Limit {
-		refillDelay := time.Duration(effectiveFilled-conf.Limit)*leakRate + rn.Sub(bucket.leakStart)%leakRate
-
-		select {
-		case <-time.After(refillDelay):
-			break
-		case <-ctx.Done():
-			return ctx.Err()
-		}
 	}
 
 	return nil

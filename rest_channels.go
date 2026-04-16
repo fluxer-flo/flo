@@ -8,20 +8,12 @@ import (
 	"time"
 )
 
-func rateLimitReadChannel(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:read:%d", channelID),
-		Limit:  100,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) GetChannel(ctx context.Context, channelID ID) (Channel, error) {
 	var resp Channel
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
-		RateLimit: rateLimitReadChannel(channelID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/channels/%d", channelID),
+		Bucket: fmt.Sprintf("channel:read:%d", channelID),
 	}, &resp)
 	if err != nil {
 		return Channel{}, err
@@ -49,21 +41,13 @@ type UpdateChannelOpts struct {
 	Nicks          map[ID]string          `json:"nicks,omitzero"`
 }
 
-func rateLimitUpdateChannel(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:update:%d", channelID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) UpdateChannel(ctx context.Context, channelID ID, opts UpdateChannelOpts) (Channel, error) {
 	var resp Channel
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:         "PATCH",
-		Path:           fmt.Sprintf("/v1/channels/%d", channelID),
-		RateLimit:      rateLimitUpdateChannel(channelID),
-		Payload:        opts,
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/channels/%d", channelID),
+		Bucket:  fmt.Sprintf("channel:update:%d", channelID),
+		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Channel{}, err
@@ -73,19 +57,11 @@ func (r *REST) UpdateChannel(ctx context.Context, channelID ID, opts UpdateChann
 	return resp, nil
 }
 
-func rateLimitDeleteChannel(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:delete:%d", channelID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) DeleteChannel(ctx context.Context, channelID ID) error {
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method:    "DELETE",
-		Path:      fmt.Sprintf("/v1/channels/%d", channelID),
-		RateLimit: rateLimitDeleteChannel(channelID),
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d", channelID),
+		Bucket: fmt.Sprintf("channel:delete:%d", channelID),
 	})
 }
 
@@ -98,14 +74,6 @@ type GetMessagesOpts struct {
 	After ID
 	// Limit is specified as limit=... in the URL if not 0.
 	Limit int
-}
-
-func rateLimitReadMessages(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:messages:read:%d", channelID),
-		Limit:  100,
-		Window: 10 * time.Second,
-	}
 }
 
 func (r *REST) GetMessages(ctx context.Context, channelID ID, opts GetMessagesOpts) ([]Message, error) {
@@ -125,10 +93,10 @@ func (r *REST) GetMessages(ctx context.Context, channelID ID, opts GetMessagesOp
 
 	var resp []Message
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages", channelID),
-		Query:     query.Encode(),
-		RateLimit: rateLimitReadMessages(channelID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages", channelID),
+		Query:  query.Encode(),
+		Bucket: fmt.Sprintf("channel:messages:read:%d", channelID),
 	}, &resp)
 	if err != nil {
 		return nil, err
@@ -138,20 +106,12 @@ func (r *REST) GetMessages(ctx context.Context, channelID ID, opts GetMessagesOp
 	return resp, nil
 }
 
-func rateLimitReadMessage(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:message:read:%d", channelID),
-		Limit:  100,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) GetMessage(ctx context.Context, channelID ID, msgID ID) (Message, error) {
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
-		RateLimit: rateLimitReadMessage(channelID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
+		Bucket: fmt.Sprintf("channel:message:read:%d", channelID),
 	}, &resp)
 	if err != nil {
 		return Message{}, err
@@ -246,14 +206,6 @@ type MessageReferenceOpts struct {
 	Type      MessageReferenceType `json:"type"`
 }
 
-func rateLimitCreateMessage(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:message:create:%d", channelID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessageOpts) (Message, error) {
 	if opts.AllowedMentions == nil {
 		opts.AllowedMentions = r.DefaultAllowedMentions
@@ -281,11 +233,11 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "POST",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages", channelID),
-		RateLimit: rateLimitCreateMessage(channelID),
-		Payload:   opts,
-		Form:      files,
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/messages", channelID),
+		Bucket:  fmt.Sprintf("channel:message:create:%d", channelID),
+		Payload: opts,
+		Form:    files,
 	}, &resp)
 	if err != nil {
 		return Message{}, err
@@ -345,11 +297,11 @@ func (r *REST) EditMessage(ctx context.Context, channelID ID, msgID ID, opts Edi
 
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "PATCH",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
-		RateLimit: rateLimitCreateMessage(channelID),
-		Payload:   opts,
-		Form:      files,
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
+		Bucket:  fmt.Sprintf("channel:message:update:%d", channelID),
+		Payload: opts,
+		Form:    files,
 	}, &resp)
 	if err != nil {
 		return Message{}, err
@@ -360,30 +312,14 @@ func (r *REST) EditMessage(ctx context.Context, channelID ID, msgID ID, opts Edi
 
 }
 
-func rateLimitDeleteMessage(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:message:delete:%d", channelID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) DeleteMessage(ctx context.Context, channelID ID, msgID ID) error {
 	uncacheMessage(channelID, msgID, r.Cache)
 
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method:    "DELETE",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
-		RateLimit: rateLimitDeleteMessage(channelID),
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
+		Bucket: fmt.Sprintf("channel:message:delete:%d", channelID),
 	})
-}
-
-func rateLimitBulkDeleteMessages(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:message:bulk_delete:%d", channelID),
-		Limit:  10,
-		Window: 10 * time.Second,
-	}
 }
 
 func (r *REST) BulkDeleteMessages(ctx context.Context, channelID ID, messageIDs []ID) error {
@@ -395,25 +331,17 @@ func (r *REST) BulkDeleteMessages(ctx context.Context, channelID ID, messageIDs 
 	payload.MessageIDs = messageIDs
 
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method:    "POST",
-		Path:      fmt.Sprintf("/v1/channels/%d/messages/bulk-delete", channelID),
-		Payload:   payload,
-		RateLimit: rateLimitBulkDeleteMessages(channelID),
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/messages/bulk-delete", channelID),
+		Payload: payload,
+		Bucket:  fmt.Sprintf("channel:message:bulk_delete:%d", channelID),
 	})
-}
-
-func rateLimitChannelTyping(channelID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("channel:typing:%d", channelID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
 }
 
 func (r *REST) StartTyping(ctx context.Context, channelID ID) error {
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method:    "POST",
-		Path:      fmt.Sprintf("/v1/channels/%d/typing", channelID),
-		RateLimit: rateLimitChannelTyping(channelID),
+		Method: "POST",
+		Path:   fmt.Sprintf("/v1/channels/%d/typing", channelID),
+		Bucket: fmt.Sprintf("channel:typing:%d", channelID),
 	})
 }

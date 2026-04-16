@@ -1,6 +1,6 @@
 
 > [!IMPORTANT]  
-> This is a heavy work in progress! I am making this public since it is already at a stage where it is somewhat interesting, but the API coverage is low, ratelimiting is not necessarily that reliable
+> The API coverage is currently quite low, and reliability is not guaranteed.
 
 # Flo
 

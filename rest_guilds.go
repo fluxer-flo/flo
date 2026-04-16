@@ -8,20 +8,12 @@ import (
 	"time"
 )
 
-func rateLimitReadGuild(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:read:%d", guildID),
-		Limit:  100,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	var result Guild
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/guilds/%d", guildID),
-		RateLimit: rateLimitReadGuild(guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d", guildID),
+		Bucket: fmt.Sprintf("guild:read:%d", guildID),
 	}, &result)
 	if err != nil {
 		return Guild{}, err
@@ -41,21 +33,13 @@ type CreateGuildChannelOpts struct {
 	NSFW     bool        `json:"nsfw,omitzero"`
 }
 
-func rateLimitCreateGuildChannel(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:channel:create:%d", guildID),
-		Limit:  10,
-		Window: 1 * time.Minute,
-	}
-}
-
 func (r *REST) CreateGuildChannel(ctx context.Context, guildID ID, opts CreateGuildChannelOpts) (Channel, error) {
 	var resp Channel
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "POST",
-		Path:      fmt.Sprintf("/v1/guilds/%d/channels", guildID),
-		RateLimit: rateLimitCreateGuildChannel(guildID),
-		Payload:   opts,
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/guilds/%d/channels", guildID),
+		Bucket:  fmt.Sprintf("guild:channel:create:%d", guildID),
+		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Channel{}, err
@@ -71,21 +55,13 @@ type CreateRoleOpts struct {
 	Perms *Perms   `json:"permissions,omitempty"`
 }
 
-func rateLimitCreateGuildRole(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:role:create:%d", guildID),
-		Limit:  10,
-		Window: 1 * time.Minute,
-	}
-}
-
 func (r *REST) CreateRole(ctx context.Context, guildID ID, opts CreateRoleOpts) (Role, error) {
 	var resp Role
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "POST",
-		Path:      fmt.Sprintf("/v1/guilds/%d/roles", guildID),
-		RateLimit: rateLimitCreateGuildRole(guildID),
-		Payload:   opts,
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/guilds/%d/roles", guildID),
+		Bucket:  fmt.Sprintf("guild:role:create:%d", guildID),
+		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Role{}, err
@@ -107,14 +83,6 @@ type GetMembersOpts struct {
 	After ID
 }
 
-func rateLimitGuildMembers(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:members:%d", guildID),
-		Limit:  40,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) GetMembers(ctx context.Context, guildID ID, opts GetMembersOpts) ([]Member, error) {
 	query := url.Values{}
 	if opts.After != 0 {
@@ -126,10 +94,10 @@ func (r *REST) GetMembers(ctx context.Context, guildID ID, opts GetMembersOpts) 
 
 	var resp []Member
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/guilds/%d/members", guildID),
-		Query:     query.Encode(),
-		RateLimit: rateLimitGuildMembers(guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/members", guildID),
+		Query:  query.Encode(),
+		Bucket: fmt.Sprintf("guild:members:%d", guildID),
 	}, &resp)
 	if err != nil {
 		return nil, err
@@ -142,9 +110,9 @@ func (r *REST) GetMembers(ctx context.Context, guildID ID, opts GetMembersOpts) 
 func (r *REST) GetMember(ctx context.Context, guildID ID, userID ID) (Member, error) {
 	var resp Member
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
-		RateLimit: rateLimitGuildMembers(guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
+		Bucket: fmt.Sprintf("guild:members:%d", guildID),
 	}, &resp)
 	if err != nil {
 		return Member{}, err
@@ -157,9 +125,9 @@ func (r *REST) GetMember(ctx context.Context, guildID ID, userID ID) (Member, er
 func (r *REST) GetCurrentMember(ctx context.Context, guildID ID) (Member, error) {
 	var resp Member
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/guilds/%d/members/@me", guildID),
-		RateLimit: rateLimitGuildMembers(guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/members/@me", guildID),
+		Bucket: fmt.Sprintf("guild:members:%d", guildID),
 	}, &resp)
 	if err != nil {
 		return Member{}, err
@@ -180,20 +148,12 @@ type UpdateMemberOpts struct {
 	ChannelID         *ID        `json:"channel_id,omitempty"`
 }
 
-func rateLimitUpdateGuildMember(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:member:update:%d", guildID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) UpdateMember(ctx context.Context, guildID ID, userID ID, opts UpdateMemberOpts) (Member, error) {
 	var resp Member
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:         "PATCH",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
-		RateLimit:      rateLimitUpdateGuildMember(guildID),
+		Bucket:         fmt.Sprintf("guild:member:update:%d", guildID),
 		Payload:        opts,
 		AuditLogReason: opts.AuditLogReason,
 	}, &resp)
@@ -225,7 +185,7 @@ func (r *REST) UpdateCurrentMember(ctx context.Context, guildID ID, opts UpdateC
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:         "PATCH",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/@me", guildID),
-		RateLimit:      rateLimitUpdateGuildMember(guildID),
+		Bucket:         fmt.Sprintf("guild:member:update:%d", guildID),
 		Payload:        opts,
 		AuditLogReason: opts.AuditLogReason,
 	}, &resp)
@@ -237,14 +197,6 @@ func (r *REST) UpdateCurrentMember(ctx context.Context, guildID ID, opts UpdateC
 	return resp, nil
 }
 
-func rateLimitAddGuildMemberRole(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:member:role:add:%d", guildID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) AddMemberRole(ctx context.Context, guildID ID, userID ID, roleID ID) error {
 	return r.AddMemberRoleWithReason(ctx, guildID, userID, roleID, "")
 }
@@ -253,7 +205,7 @@ func (r *REST) AddMemberRoleWithReason(ctx context.Context, guildID ID, userID I
 	err := r.RequestNoContent(ctx, RESTRequest{
 		Method:         "PUT",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d/roles/%d", guildID, userID, roleID),
-		RateLimit:      rateLimitAddGuildMemberRole(guildID),
+		Bucket:         fmt.Sprintf("guild:member:role:add:%d", guildID),
 		AuditLogReason: reason,
 	})
 	if err != nil {
@@ -278,14 +230,6 @@ func (r *REST) AddMemberRoleWithReason(ctx context.Context, guildID ID, userID I
 	return nil
 }
 
-func rateLimitRemoveMemberRole(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:member:role:remove:%d", guildID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) RemoveMemberRole(ctx context.Context, guildID ID, userID ID, roleID ID) error {
 	return r.RemoveMemberRoleWithReason(ctx, guildID, userID, roleID, "")
 }
@@ -294,7 +238,7 @@ func (r *REST) RemoveMemberRoleWithReason(ctx context.Context, guildID ID, userI
 	err := r.RequestNoContent(ctx, RESTRequest{
 		Method:         "DELETE",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d/roles/%d", guildID, userID, roleID),
-		RateLimit:      rateLimitRemoveMemberRole(guildID),
+		Bucket:         fmt.Sprintf("guild:member:role:remove:%d", guildID),
 		AuditLogReason: reason,
 	})
 	if err != nil {
@@ -323,14 +267,6 @@ func (r *REST) RemoveMemberRoleWithReason(ctx context.Context, guildID ID, userI
 	return nil
 }
 
-func rateLimitRemoveMember(guildID ID) RESTRateLimitConfig {
-	return RESTRateLimitConfig{
-		Bucket: fmt.Sprintf("guild:member:remove:%d", guildID),
-		Limit:  20,
-		Window: 10 * time.Second,
-	}
-}
-
 func (r *REST) RemoveMember(ctx context.Context, guildID ID, userID ID) error {
 	return r.RemoveMemberWithReason(ctx, guildID, userID, "")
 }
@@ -339,7 +275,7 @@ func (r *REST) RemoveMemberWithReason(ctx context.Context, guildID ID, userID ID
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "DELETE",
 		Path:           fmt.Sprintf("/v1/guilds/%d/members/%d", guildID, userID),
-		RateLimit:      rateLimitRemoveMember(guildID),
+		Bucket:         fmt.Sprintf("guild:member:remove:%d", guildID),
 		AuditLogReason: reason,
 	})
 }
@@ -347,9 +283,9 @@ func (r *REST) RemoveMemberWithReason(ctx context.Context, guildID ID, userID ID
 func (r *REST) GetGuildBans(ctx context.Context, guildID ID) ([]GuildBan, error) {
 	var resp []GuildBan
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:    "GET",
-		Path:      fmt.Sprintf("/v1/guilds/%d/bans", guildID),
-		RateLimit: rateLimitGuildMembers(guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/bans", guildID),
+		Bucket: fmt.Sprintf("guild:members:%d", guildID),
 	}, &resp)
 	if err != nil {
 		return nil, err
@@ -389,7 +325,7 @@ func (r *REST) CreateGuildBan(ctx context.Context, guildID ID, userID ID, opts C
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "PUT",
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
-		RateLimit:      rateLimitRemoveMember(guildID),
+		Bucket:         fmt.Sprintf("guild:member:remove:%d", guildID),
 		Payload:        payload,
 		AuditLogReason: opts.AuditLogReason,
 	})
@@ -403,7 +339,7 @@ func (r *REST) RemoveGuildBanWithReason(ctx context.Context, guildID ID, userID 
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method:         "DELETE",
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
-		RateLimit:      rateLimitRemoveMember(guildID),
+		Bucket:         fmt.Sprintf("guild:member:remove:%d", guildID),
 		AuditLogReason: reason,
 	})
 }
