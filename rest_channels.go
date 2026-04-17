@@ -313,8 +313,6 @@ func (r *REST) EditMessage(ctx context.Context, channelID ID, msgID ID, opts Edi
 }
 
 func (r *REST) DeleteMessage(ctx context.Context, channelID ID, msgID ID) error {
-	uncacheMessage(channelID, msgID, r.Cache)
-
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method: "DELETE",
 		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d", channelID, msgID),
@@ -323,8 +321,6 @@ func (r *REST) DeleteMessage(ctx context.Context, channelID ID, msgID ID) error 
 }
 
 func (r *REST) BulkDeleteMessages(ctx context.Context, channelID ID, messageIDs []ID) error {
-	uncacheMessages(channelID, messageIDs, r.Cache)
-
 	var payload struct {
 		MessageIDs []ID `json:"message_ids"`
 	}

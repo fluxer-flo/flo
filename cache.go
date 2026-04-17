@@ -365,35 +365,6 @@ func cacheMessageCommon(msg *Message, cache *Cache) {
 	}
 }
 
-func uncacheMessage(channelID ID, msgID ID, cache *Cache) {
-	channel, ok := cache.Channel(channelID)
-	if !ok {
-		return
-	}
-
-	if channel.Messages == nil {
-		return
-	}
-
-	channel.Messages.Delete(msgID)
-}
-
-func uncacheMessages(channelID ID, messageIDs []ID, cache *Cache) {
-	channel, ok := cache.Channel(channelID)
-
-	if !ok {
-		return
-	}
-
-	if channel.Messages == nil {
-		return
-	}
-
-	for _, id := range messageIDs {
-		channel.Messages.Delete(id)
-	}
-}
-
 func uncacheGatewayMessage(msg *MessageDeleteEvent, cache *Cache) *Message {
 	if msg.GuildID != nil {
 		if guild, ok := cache.Guilds.Get(*msg.GuildID); ok {
