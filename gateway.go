@@ -1171,7 +1171,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		s.gateway.RoleCreate.emit(event)
 	case "GUILD_ROLE_UPDATE":
 		var raw struct {
-			GuildID ID   `json:"id"`
+			GuildID ID   `json:"guild_id"`
 			Role    Role `json:"role"`
 		}
 		err := json.Unmarshal(packet.Data, &raw)
@@ -1180,7 +1180,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		}
 
 		if cache != nil {
-			guild, ok := cache.Guilds.Get(raw.Role.ID)
+			guild, ok := cache.Guilds.Get(raw.GuildID)
 			if ok && guild.Roles != nil {
 				guild.Roles.Set(raw.Role.ID, raw.Role)
 			}
