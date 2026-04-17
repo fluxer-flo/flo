@@ -70,6 +70,34 @@ func (c *Channel) IsTextable() bool {
 	return c.Type.IsTextable()
 }
 
+func (c *Channel) RoleOverwrite(roleID ID) (ChannelPermOverwrite, bool) {
+	// this may not be very efficient if there is a large number of overwrites
+	// TODO: investigate
+
+	for _, overwrite := range c.PermOverwrites {
+		if overwrite.Type == ChannelPermOverwriteTypeRole &&
+			overwrite.ID == roleID {
+			return overwrite, true
+		}
+	}
+
+	return ChannelPermOverwrite{}, false
+}
+
+func (c *Channel) MemberOverwrite(userID ID) (ChannelPermOverwrite, bool) {
+	// this may not be very efficient if there is a large number of overwrites
+	// TODO: investigate
+
+	for _, overwrite := range c.PermOverwrites {
+		if overwrite.Type == ChannelPermOverwriteTypeMember &&
+			overwrite.ID == userID {
+			return overwrite, true
+		}
+	}
+
+	return ChannelPermOverwrite{}, false
+}
+
 func (c *Channel) Update(ctx context.Context, rest *REST, opts UpdateChannelOpts) error {
 	channel, err := rest.UpdateChannel(ctx, c.ID, opts)
 	if err != nil {

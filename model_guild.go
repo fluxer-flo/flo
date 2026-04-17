@@ -84,6 +84,46 @@ func (g *Guild) ResolvePerms(member Member) Perms {
 	return result
 }
 
+// ResolvePermsInChannel resolves permissions of a member for a channel in this guild.
+// Perms{}, false is returned if the channel is from outside this guild.
+func (g *Guild) ResolvePermsInChannel(member Member, channel Channel) (Perms, bool) {
+	if channel.GuildID == nil || *channel.GuildID != g.ID {
+		return Perms{}, false
+	}
+
+	result := g.ResolvePerms(member)
+	if result.Has(PermAdministrator) {
+		return result, true
+	}
+	
+	if everyonePerms, ok := channel.RoleOverwrite(g.ID); ok {
+		result = result.Difference(everyonePerms.Deny)
+		result = result.Union(everyonePerms.Allow)
+	}
+
+	var roleAllow Perms
+	var roleDeny Perms
+	for _, roleID := range member.Roles {
+		rolePerms, ok := channel.RoleOverwrite(roleID)
+		if !ok {
+			continue
+		}
+
+		roleAllow = roleAllow.Union(rolePerms.Allow)
+		roleDeny = roleDeny.Union(rolePerms.Deny)
+	}
+
+	result = result.Difference(roleDeny)
+	result = result.Union(roleAllow)
+
+	if memberPerms, ok := channel.MemberOverwrite(member.ID()); ok {
+		result = result.Difference(memberPerms.Deny)
+		result = result.Union(memberPerms.Allow)
+	}
+
+	return result, true
+}
+
 func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildChannelOpts) (Channel, error) {
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }
