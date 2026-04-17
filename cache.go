@@ -235,6 +235,10 @@ func cacheChannel(channel *Channel, cache *Cache) {
 }
 
 func cacheGuildChannel(guild *Guild, channel *Channel, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
 	if guild.Channels == nil {
 		return
 	}

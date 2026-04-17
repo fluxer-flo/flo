@@ -17,6 +17,8 @@ type gatewayEvents struct {
 	MessageUpdate Signal[MessageUpdateEvent]
 	// MessageDelete is emitted when a message is deleted.
 	MessageDelete Signal[MessageDeleteEvent]
+	// MessageDeleteBulk is emitted when messages are bulk-deleted.
+	MessageDeleteBulk Signal[MessageDeleteBulkEvent]
 	// TypingStart is emitted when a user starts typing in a channel.
 	TypingStart Signal[TypingStartEvent]
 	// GuildCreate is emitted when the user has joined a guild.
@@ -150,6 +152,18 @@ type MessageDeleteEvent struct {
 	AuthorID  *ID      `json:"author_id"`
 	Member    *Member  `json:"member"`
 	Cached    *Message `json:"-"`
+}
+
+type MessageDeleteBulkEvent struct {
+	ChannelID ID
+	GuildID   *ID
+	Messages []BulkDeletedMessage
+}
+
+type BulkDeletedMessage struct {
+	ID ID 
+	// Cached is the message that was removed from cache by this event, if any.
+	Cached *Message
 }
 
 // Guild returns the guild the message was sent in if it is cached.

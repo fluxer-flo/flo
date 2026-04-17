@@ -1071,6 +1071,51 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		event.Cached = uncacheGatewayMessage(&event, cache)
 		s.gateway.MessageDelete.emit(event)
+	case "MESSAGE_DELETE_BULK":
+		var raw struct {
+			ChannelID ID   `json:"channel_id"`
+			GuildID   *ID  `json:"guild_id"`
+			IDs       []ID `json:"ids"`
+		}
+		err := json.Unmarshal(packet.Data, &raw)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal MESSAGE_DELETE_BULK: %w", err)
+		}
+
+		event := MessageDeleteBulkEvent{
+			ChannelID: raw.ChannelID,
+			GuildID:   raw.GuildID,
+			Messages:  make([]BulkDeletedMessage, 0, len(raw.IDs)),
+		}
+
+		var messages *Collection[Message]
+		if cache != nil {
+			if raw.GuildID != nil {
+				if guild, ok := cache.Guilds.Get(*raw.GuildID); ok {
+					if channel, ok := guild.Channels.Get(raw.ChannelID); ok {
+						messages = channel.Messages
+					}
+				}
+			} else {
+				if channel, ok := cache.Channel(raw.ChannelID); ok {
+					messages = channel.Messages
+				}
+			}
+		}
+
+		for _, id := range raw.IDs {
+			var cached *Message
+			if messages != nil {
+				cached, _ = messages.Delete(id)
+			}
+
+			event.Messages = append(event.Messages, BulkDeletedMessage{
+				ID: id,
+				Cached: cached,
+			})
+		}
+
+		s.gateway.MessageDeleteBulk.emit(event)
 	case "TYPING_START":
 		var raw struct {
 			ChannelID ID      `json:"channel_id"`
