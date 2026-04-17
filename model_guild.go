@@ -3,7 +3,7 @@ package flo
 import (
 	"context"
 	"fmt"
-	"math/big"
+	"strconv"
 	"time"
 )
 
@@ -95,7 +95,7 @@ func (g *Guild) ResolvePermsInChannel(member Member, channel Channel) (Perms, bo
 	if result.Has(PermAdministrator) {
 		return result, true
 	}
-	
+
 	if everyonePerms, ok := channel.RoleOverwrite(g.ID); ok {
 		result = result.Difference(everyonePerms.Deny)
 		result = result.Union(everyonePerms.Allow)
@@ -352,8 +352,9 @@ func (m *Member) DisplayName() string {
 
 // Perms respresents a set of member permissions.
 // The zero value can be used to represent no permissions.
+// The underlying uint64 cannot be accessed directly since more than 64 permissions may be available at some point.
 type Perms struct {
-	val *big.Int
+	val uint64
 }
 
 var (
@@ -445,91 +446,36 @@ func NewPerms(p ...Perms) Perms {
 }
 
 func NewPermsBit(bit uint) Perms {
-	result := big.NewInt(1)
-	result.Lsh(result, bit)
-
-	return Perms{result}
+	return Perms{1 << bit}
 }
 
-// PermsFromBigInt creates permissions with the underlying [big.Int] representation.
-func PermsFromBigInt(val *big.Int) Perms {
-	if val == nil {
-		return Perms{}
-	}
-
-	var result Perms
-	result.val = big.NewInt(0)
-	result.val.Set(val)
-
-	return result
+func PermsFromUint64(i uint64) Perms {
+	return Perms{i}
 }
 
-// BigInt returns the underlying [big.Int] representation of the permissions.
-func (p Perms) BigInt() *big.Int {
-	result := big.NewInt(0)
-
-	if p.val != nil {
-		result.Set(p.val)
-	}
-
-	return result
+// ToUint64 returns the lower 64 bits of the permissions.
+func (p Perms) ToUint64() uint64 {
+	return p.val
 }
 
 // Intersection returns the common permissions between p and p2.
 func (p Perms) Intersection(p2 Perms) Perms {
-	if p.val == nil || p2.val == nil {
-		return Perms{}
-	}
-
-	result := big.NewInt(0)
-	result.And(p.val, p2.val)
-
-	return Perms{result}
+	return Perms{p.val & p2.val}
 }
 
 // Union returns a combination of permissions between p and p2.
 func (p Perms) Union(p2 Perms) Perms {
-	if p.val == nil {
-		return p2
-	}
-	if p2.val == nil {
-		return p
-	}
-
-	result := big.NewInt(0)
-	result.Or(p.val, p2.val)
-
-	return Perms{result}
+	return Perms{p.val | p2.val}
 }
 
 // Difference returns the set of permissions which are in p but not in p2.
 func (p Perms) Difference(p2 Perms) Perms {
-	if p.val == nil {
-		return Perms{}
-	}
-	if p2.val == nil {
-		return p
-	}
-
-	mask := big.NewInt(0)
-	mask.Not(p2.val)
-
-	result := big.NewInt(0)
-	result.And(result, mask)
-
-	return Perms{result}
+	return Perms{p.val & ^p2.val}
 }
 
 // Equal returns true if p and p2 represent the same set of permissions.
 func (p Perms) Equal(p2 Perms) bool {
-	if p.val == nil {
-		return p2.val == nil || p2.val.BitLen() == 0
-	}
-	if p2.val == nil {
-		return p.val == nil || p.val.BitLen() == 0
-	}
-
-	return p.val.Cmp(p2.val) == 0
+	return p.val == p2.val
 }
 
 // Has returns true if p contains all the perms in p2.
@@ -546,20 +492,11 @@ func (p *Perms) Set(p2 ...Perms) {
 // Clear removes all of the permissions on p2 from p.
 // If p2 is empty, p is fully cleared instead.
 func (p *Perms) Clear(p2 ...Perms) {
-	if len(p2) == 0 {
-		p.val = nil
-		return
-	}
-
 	*p = p.Difference(NewPerms(p2...))
 }
 
 func (p Perms) String() string {
-	if p.val == nil {
-		return "0"
-	} else {
-		return p.val.String()
-	}
+	return strconv.FormatUint(p.val, 10)
 }
 
 func (p Perms) MarshalJSON() ([]byte, error) {
@@ -573,13 +510,12 @@ func (p *Perms) UnmarshalJSON(data []byte) error {
 
 	unquoted := data[1 : len(data)-1]
 
-	result := big.NewInt(0)
-	err := result.UnmarshalText(unquoted)
+	val, err := strconv.ParseUint(string(unquoted), 10, 64)
 	if err != nil {
 		return err
 	}
 
-	p.val = result
+	p.val = val
 	return nil
 }
 
