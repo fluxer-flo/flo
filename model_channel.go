@@ -293,6 +293,22 @@ func (m *Message) CreateReaction(ctx context.Context, rest *REST, emoji string) 
 	return rest.CreateReaction(ctx, m.ChannelID, m.ID, emoji)
 }
 
+func (m *Message) RemoveReaction(ctx context.Context, rest *REST, emoji string, userID ID) error {
+	return rest.RemoveReaction(ctx, m.ChannelID, m.ID, emoji, userID)
+}
+
+func (m *Message) RemoveOwnReaction(ctx context.Context, rest *REST, emoji string) error {
+	return rest.RemoveOwnReaction(ctx, m.ChannelID, m.ID, emoji)
+}
+
+func (m *Message) RemoveEmojiReactions(ctx context.Context, rest *REST, emoji string) error {
+	return rest.RemoveEmojiReactions(ctx, m.ChannelID, m.ID, emoji)
+}
+
+func (m *Message) RemoveAllReactions(ctx context.Context, rest *REST) error {
+	return rest.RemoveAllReactions(ctx, m.ChannelID, m.ID)
+}
+
 type MessageType uint
 
 const (

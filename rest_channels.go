@@ -351,3 +351,35 @@ func (r *REST) CreateReaction(ctx context.Context, channelID ID, messageID ID, e
 		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
 	})
 }
+
+func (r *REST) RemoveReaction(ctx context.Context, channelID ID, messageID ID, emoji string, userID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d/reactions/%s/%d", channelID, messageID, url.PathEscape(emoji), userID),
+		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
+	})
+}
+
+func (r *REST) RemoveOwnReaction(ctx context.Context, channelID ID, messageID ID, emoji string) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d/reactions/%s/@me", channelID, messageID, url.PathEscape(emoji)),
+		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
+	})
+}
+
+func (r *REST) RemoveEmojiReactions(ctx context.Context, channelID ID, messageID ID, emoji string) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d/reactions/%s", channelID, messageID, url.PathEscape(emoji)),
+		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
+	})
+}
+
+func (r *REST) RemoveAllReactions(ctx context.Context, channelID ID, messageID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d/reactions", channelID, messageID),
+		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
+	})
+}
