@@ -130,14 +130,14 @@ func (g *Gateway) RunningShards() uint {
 
 // Start attemps to starts all shards.
 // The sharding parameters should not be changed after this is called.
-// You may ignore this if it is not important.
+// An error will be returned if any of the shards are already running - you may ignore this if it is not important.
 func (g *Gateway) Start() error {
 	var errs []error
 	for _, shard := range g.Shards() {
 		err := shard.Start()
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"failed to connect shard #%d: %w",
+				"failed to start shard #%d: %w",
 				shard.id,
 				err,
 			))
