@@ -112,16 +112,20 @@ func (c *Channel) Delete(ctx context.Context, rest *REST) error {
 	return rest.DeleteChannel(ctx, c.ID)
 }
 
-func (c *Channel) CreateMessage(ctx context.Context, rest *REST, opts CreateMessageOpts) (Message, error) {
-	return rest.CreateMessage(ctx, c.ID, opts)
-}
-
 func (c *Channel) GetMessage(ctx context.Context, rest *REST, msgID ID) (Message, error) {
 	return rest.GetMessage(ctx, c.ID, msgID)
 }
 
 func (c *Channel) GetMessages(ctx context.Context, rest *REST, opts GetMessagesOpts) ([]Message, error) {
 	return rest.GetMessages(ctx, c.ID, opts)
+}
+
+func (c *Channel) CreateMessage(ctx context.Context, rest *REST, opts CreateMessageOpts) (Message, error) {
+	return rest.CreateMessage(ctx, c.ID, opts)
+}
+
+func (c *Channel) EditMessage(ctx context.Context, rest *REST, msgID ID, opts EditMessageOpts) (Message, error) {
+	return rest.EditMessage(ctx, c.ID, msgID, opts)
 }
 
 func (c *Channel) DeleteMessage(ctx context.Context, rest *REST, msgID ID) error {
@@ -134,6 +138,26 @@ func (c *Channel) BulkDeleteMessages(ctx context.Context, rest *REST, messageIDs
 
 func (c *Channel) StartTyping(ctx context.Context, rest *REST) error {
 	return rest.StartTyping(ctx, c.ID)
+}
+
+func (c *Channel) CreateReaction(ctx context.Context, rest *REST, msgID ID, emoji string) error {
+	return rest.CreateReaction(ctx, c.ID, msgID, emoji)
+}
+
+func (c *Channel) RemoveReaction(ctx context.Context, rest *REST, msgID ID, emoji string, userID ID) error {
+	return rest.RemoveReaction(ctx, c.ID, msgID, emoji, userID)
+}
+
+func (c *Channel) RemoveOwnReaction(ctx context.Context, rest *REST, msgID ID, emoji string) error {
+	return rest.RemoveOwnReaction(ctx, c.ID, msgID, emoji)
+}
+
+func (c *Channel) RemoveEmojiReactions(ctx context.Context, rest *REST, msgID ID, emoji string) error {
+	return rest.RemoveEmojiReactions(ctx, c.ID, msgID, emoji)
+}
+
+func (c *Channel) RemoveAllReactions(ctx context.Context, rest *REST, msgID ID) error {
+	return rest.RemoveAllReactions(ctx, c.ID, msgID)
 }
 
 func (c *Channel) updateProperties(channel *Channel) {
