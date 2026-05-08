@@ -287,6 +287,12 @@ func (m *Message) Delete(ctx context.Context, rest *REST) error {
 	return rest.DeleteMessage(ctx, m.ChannelID, m.ID)
 }
 
+// CreateReaction adds a reaction to the specified message with a custom or unicode emoji.
+// A custom emoji should be formatted as name:id.
+func (m *Message) CreateReaction(ctx context.Context, rest *REST, emoji string) error {
+	return rest.CreateReaction(ctx, m.ChannelID, m.ID, emoji)
+}
+
 type MessageType uint
 
 const (

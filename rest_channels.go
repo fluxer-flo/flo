@@ -341,3 +341,13 @@ func (r *REST) StartTyping(ctx context.Context, channelID ID) error {
 		Bucket: fmt.Sprintf("channel:typing:%d", channelID),
 	})
 }
+
+// CreateReaction adds a reaction to the specified message with a custom or unicode emoji.
+// A custom emoji should be formatted as name:id.
+func (r *REST) CreateReaction(ctx context.Context, channelID ID, messageID ID, emoji string) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "PUT",
+		Path:   fmt.Sprintf("/v1/channels/%d/messages/%d/reactions/%s/@me", channelID, messageID, url.PathEscape(emoji)),
+		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
+	})
+}
