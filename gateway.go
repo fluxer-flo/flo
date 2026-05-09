@@ -45,6 +45,8 @@ type Gateway struct {
 	// TotalShards is the total amount of shards that the bot will indicate it will use.
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
+	// InitialPresence specifies the presence each shard will start with.
+	InitialPresence PresenceOpts
 
 	// See gateway_events.go.
 	gatewayEvents
@@ -75,8 +77,9 @@ func (g *Gateway) initShards() {
 	g.shards = make([]*Shard, g.LastShard-g.FirstShard+1)
 	for id := uint(0); id <= g.LastShard-g.FirstShard; id++ {
 		g.shards[id] = &Shard{
-			gateway: g,
-			id:      g.FirstShard + id,
+			gateway:  g,
+			id:       g.FirstShard + id,
+			presence: g.InitialPresence,
 		}
 	}
 }
@@ -214,11 +217,13 @@ type Shard struct {
 	id      uint
 
 	// stateMu is the mutex for the shared state of the shard.
-	stateMu       sync.Mutex
+	stateMu       sync.RWMutex
 	running       bool
 	latency       time.Duration
 	reqDisconnect context.CancelFunc
 	reqReconnect  bool
+	presence      PresenceOpts
+	syncPresence  chan struct{}
 	// (end of shared state - the remaining fields are only used by a single goroutine at a time)
 
 	conn              *websocket.Conn
@@ -235,6 +240,21 @@ type Shard struct {
 
 	sessionID string
 	lastSeq   uint
+}
+
+type PresenceOpts struct {
+	Status       string           `json:"status"`
+	AFK          bool             `json:"afk"`
+	Mobile       bool             `json:"mobile"`
+	CustomStatus CustomStatusOpts `json:"custom_status,omitzero"`
+}
+
+type CustomStatusOpts struct {
+	Text          string    `json:"text,omitempty"`
+	ExpiresAt     time.Time `json:"expires_at,omitzero"`
+	EmojiID       string    `json:"emoji_id,omitempty"`
+	EmojiName     string    `json:"emoji_name,omitempty"`
+	EmojiAnimated bool      `json:"emoji_animated"`
 }
 
 func (s *Shard) Gateway() *Gateway {
@@ -254,8 +274,8 @@ var (
 
 // Running is true if the shard has an actively running gorountine from calling Connect.
 func (s *Shard) Running() bool {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
 
 	return s.running
 }
@@ -263,8 +283,8 @@ func (s *Shard) Running() bool {
 // Latency returns the latency if the shard is running and has determined it.
 // Otherwise it returns 0, false.
 func (s *Shard) Latency() (time.Duration, bool) {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
 
 	return s.latency, s.latency != 0
 }
@@ -335,6 +355,27 @@ func (s *Shard) Reconnect() error {
 	s.reqDisconnect = nil
 	s.reqReconnect = true
 	return nil
+}
+
+// Presence returns the presence the shard currently has set.
+func (s *Shard) Presence() PresenceOpts {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+
+	return s.presence
+}
+
+// SetPresence updates the presence on the shard.
+// If the shard is currently connected it will be sent immediately, otherwise it will be sent the next time the shard connects.
+func (s *Shard) SetPresence(presence PresenceOpts) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	s.presence = presence
+	if s.syncPresence != nil {
+		s.syncPresence <- struct{}{}
+		s.syncPresence = nil
+	}
 }
 
 func (s *Shard) sleepTime(attempts uint) time.Duration {
@@ -493,6 +534,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		connStartTime := time.Now()
 
+		s.stateMu.Lock()
+		s.syncPresence = make(chan struct{}, 1)
+		s.stateMu.Unlock()
+
 		s.conn = conn
 		s.inbound = make(chan GatewayPacket)
 		s.outbound = make(chan GatewayPacket, 1024)
@@ -512,6 +557,10 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		s.stateMu.Lock()
 		s.latency = 0
+
+		close(s.syncPresence)
+		_, _ = <-s.syncPresence
+		s.syncPresence = nil
 		s.stateMu.Unlock()
 
 		var closeErr *websocket.CloseError
@@ -761,6 +810,24 @@ func (s *Shard) controlLoop(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+		case <-s.syncPresence:
+			s.stateMu.Lock()
+			s.syncPresence = make(chan struct{}, 1)
+			data, err := json.Marshal(s.presence)
+			s.stateMu.Unlock()
+			if err != nil {
+				return fmt.Errorf("failed to marshal presence: %w", err)
+			}
+
+			packet := GatewayPacket{
+				Opcode: GatewayOpPresenceUpdate,
+				Data:   data,
+			}
+			select {
+			case s.outbound <- packet:
+			case err := <-s.writeErr:
+				return err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -861,6 +928,7 @@ type gatewayIdentifyPayload struct {
 		Browser string `json:"browser"`
 		Device  string `json:"device"`
 	} `json:"properties"`
+	Presence PresenceOpts `json:"presence"`
 }
 
 type gatewayResumePayload struct {
@@ -878,6 +946,10 @@ func (s *Shard) establishSession() error {
 			Shard: [2]uint{s.id, s.gateway.TotalShards},
 		}
 
+		s.stateMu.RLock()
+		payload.Presence = s.presence
+		s.stateMu.RUnlock()
+
 		payload.Properties.OS = runtime.GOOS
 		payload.Properties.Browser = defaultUserAgent
 		payload.Properties.Device = defaultUserAgent
@@ -886,6 +958,7 @@ func (s *Shard) establishSession() error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal Identify packet data: %w", err)
 		}
+		fmt.Println("sending over ", string(data))
 
 		packet := GatewayPacket{
 			Opcode: GatewayOpIdentify,
