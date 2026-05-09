@@ -757,7 +757,10 @@ func (s *Shard) controlLoop(ctx context.Context) error {
 				s.pendingHeartRate = 0
 			}
 
-			s.sendHeartbeat()
+			err := s.sendHeartbeat()
+			if err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -827,7 +830,10 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 			return err
 		}
 	case GatewayOpHeartbeat:
-		s.sendHeartbeat()
+		err := s.sendHeartbeat()
+		if err != nil {
+			return err
+		}
 	case GatewayOpHeartbeatACK:
 		s.heartbeatACK = true
 
@@ -881,9 +887,14 @@ func (s *Shard) establishSession() error {
 			return fmt.Errorf("failed to marshal Identify packet data: %w", err)
 		}
 
-		s.outbound <- GatewayPacket{
+		packet := GatewayPacket{
 			Opcode: GatewayOpIdentify,
 			Data:   data,
+		}
+		select {
+		case s.outbound <- packet:
+		case err := <-s.writeErr:
+			return err
 		}
 	} else {
 		slog.Debug("have existing session; sending resume packet", slog.Any("shard", s.id), slog.Any("session", s.sessionID))
@@ -899,9 +910,15 @@ func (s *Shard) establishSession() error {
 			return fmt.Errorf("failed to marshal Resume packet data: %w", err)
 		}
 
-		s.outbound <- GatewayPacket{
+		packet := GatewayPacket{
 			Opcode: GatewayOpResume,
 			Data:   data,
+		}
+
+		select {
+		case s.outbound <- packet:
+		case err := <-s.writeErr:
+			return err
 		}
 	}
 
@@ -1110,7 +1127,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			}
 
 			event.Messages = append(event.Messages, BulkDeletedMessage{
-				ID: id,
+				ID:     id,
 				Cached: cached,
 			})
 		}
@@ -1398,16 +1415,23 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 	return nil
 }
 
-func (s *Shard) sendHeartbeat() {
+func (s *Shard) sendHeartbeat() error {
 	s.lastHeartbeatSent = time.Now()
 
 	data := []byte("null")
 	if s.lastSeq != 0 {
 		data = fmt.Append(nil, s.lastSeq)
 	}
-
-	s.outbound <- GatewayPacket{
+	packet := GatewayPacket{
 		Opcode: GatewayOpHeartbeat,
 		Data:   data,
 	}
+
+	select {
+	case s.outbound <- packet:
+	case err := <-s.writeErr:
+		return err
+	}
+
+	return nil
 }
