@@ -958,7 +958,6 @@ func (s *Shard) establishSession() error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal Identify packet data: %w", err)
 		}
-		fmt.Println("sending over ", string(data))
 
 		packet := GatewayPacket{
 			Opcode: GatewayOpIdentify,
