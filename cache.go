@@ -447,16 +447,20 @@ func cacheGatewayGuild(guild *gatewayGuild, cache *Cache) (Guild, bool) {
 		cacheGuildChannel(&result, &channel, cache)
 	}
 
-	for _, role := range guild.Roles {
-		result.Roles.Set(role.ID, role)
+	if result.Roles != nil {
+		for _, role := range guild.Roles {
+			result.Roles.Set(role.ID, role)
+		}
 	}
 
 	for _, member := range guild.Members {
 		cacheGuildMember(&result, &member, cache)
 	}
 
-	for _, emoji := range guild.Emojis {
-		result.Emojis.Set(emoji.ID, emoji)
+	if result.Emojis != nil {
+		for _, emoji := range guild.Emojis {
+			result.Emojis.Set(emoji.ID, emoji)
+		}
 	}
 
 	for _, sticker := range guild.Stickers {

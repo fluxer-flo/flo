@@ -49,12 +49,12 @@ func (r *REST) CreateGuildChannel(ctx context.Context, guildID ID, opts CreateGu
 	return resp, nil
 }
 
-func (r *REST) GetRole(ctx context.Context, guildID ID, roleID ID) (Role, error)  {
+func (r *REST) GetRole(ctx context.Context, guildID ID, roleID ID) (Role, error) {
 	var resp Role
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method:  "GET",
-		Path:    fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
-		Bucket:  fmt.Sprintf("guild:role:read:%d", guildID),
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket: fmt.Sprintf("guild:role:read:%d", guildID),
 	}, &resp)
 	if err != nil {
 		return Role{}, err
@@ -62,7 +62,9 @@ func (r *REST) GetRole(ctx context.Context, guildID ID, roleID ID) (Role, error)
 
 	if r.Cache != nil {
 		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
-			guild.Roles.Set(resp.ID, resp)
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
 		}
 	}
 
@@ -89,7 +91,9 @@ func (r *REST) CreateRole(ctx context.Context, guildID ID, opts CreateRoleOpts) 
 
 	if r.Cache != nil {
 		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
-			guild.Roles.Set(resp.ID, resp)
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
 		}
 	}
 
@@ -120,7 +124,9 @@ func (r *REST) UpdateRole(ctx context.Context, guildID ID, roleID ID, opts Updat
 
 	if r.Cache != nil {
 		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
-			guild.Roles.Set(resp.ID, resp)
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
 		}
 	}
 
@@ -461,8 +467,8 @@ func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opt
 
 func (r *REST) DeleteGuildEmoji(ctx context.Context, guildID ID, emojiID ID) error {
 	return r.RequestNoContent(ctx, RESTRequest{
-		Method:  "DELETE",
-		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
-		Bucket:  fmt.Sprintf("guild:emojis:delete:%d", guildID),
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket: fmt.Sprintf("guild:emojis:delete:%d", guildID),
 	})
 }
