@@ -110,7 +110,7 @@ func (r *REST) UpdateRole(ctx context.Context, guildID ID, roleID ID, opts Updat
 func (r *REST) DeleteRole(ctx context.Context, guildID ID, roleID ID) error {
 	return r.RequestNoContent(ctx, RESTRequest{
 		Method: "DELETE",
-		Path: fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Path:   fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
 		Bucket: fmt.Sprintf("guild:role:delete:%d", guildID),
 	})
 }
@@ -380,5 +380,69 @@ func (r *REST) RemoveGuildBanWithReason(ctx context.Context, guildID ID, userID 
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
 		Bucket:         fmt.Sprintf("guild:member:remove:%d", guildID),
 		AuditLogReason: reason,
+	})
+}
+
+type CreateEmojiOpts struct {
+	Name string `json:"name"`
+	// Image is the base64 encoded image of the emoji.
+	Image string `json:"image"`
+}
+
+func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateEmojiOpts) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis", guildID),
+		Bucket:  fmt.Sprintf("guild:emojis:create:%d", guildID),
+		Payload: opts,
+	}, resp)
+	if err != nil {
+		return GuildEmoji{}, nil
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+type UpdateGuildEmojiOpts struct {
+	Name string `json:"name"`
+}
+
+func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opts UpdateGuildEmojiOpts) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket:  fmt.Sprintf("guild:emojis:update:%d", guildID),
+		Payload: opts,
+	}, resp)
+	if err != nil {
+		return GuildEmoji{}, nil
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteGuildEmoji(ctx context.Context, guildID ID, emojiID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method:  "DELETE",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket:  fmt.Sprintf("guild:emojis:delete:%d", guildID),
 	})
 }
