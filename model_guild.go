@@ -212,7 +212,7 @@ func (g *Guild) GetEmoji(ctx context.Context, rest *REST, emojiID ID) (GuildEmoj
 	return rest.GetGuildEmoji(ctx, g.ID, emojiID)
 }
 
-func (g *Guild) CreateEmoji(ctx context.Context, rest *REST, opts CreateEmojiOpts) (GuildEmoji, error) {
+func (g *Guild) CreateEmoji(ctx context.Context, rest *REST, opts CreateGuildEmojiOpts) (GuildEmoji, error) {
 	return rest.CreateGuildEmoji(ctx, g.ID, opts)
 }
 

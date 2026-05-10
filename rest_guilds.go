@@ -432,13 +432,13 @@ func (r *REST) GetGuildEmoji(ctx context.Context, guildID ID, emojiID ID) (Guild
 
 }
 
-type CreateEmojiOpts struct {
+type CreateGuildEmojiOpts struct {
 	Name string `json:"name"`
 	// Image is the base64 encoded image of the emoji.
 	Image string `json:"image"`
 }
 
-func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateEmojiOpts) (GuildEmoji, error) {
+func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateGuildEmojiOpts) (GuildEmoji, error) {
 	var resp GuildEmoji
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:  "POST",
