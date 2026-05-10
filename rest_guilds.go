@@ -409,6 +409,29 @@ func (r *REST) RemoveGuildBanWithReason(ctx context.Context, guildID ID, userID 
 	})
 }
 
+func (r *REST) GetGuildEmoji(ctx context.Context, guildID ID, emojiID ID) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "GET",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket:  fmt.Sprintf("guild:emojis:read:%d", guildID),
+	}, resp)
+	if err != nil {
+		return GuildEmoji{}, nil
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+
+}
+
 type CreateEmojiOpts struct {
 	Name string `json:"name"`
 	// Image is the base64 encoded image of the emoji.

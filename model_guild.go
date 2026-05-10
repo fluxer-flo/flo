@@ -208,6 +208,10 @@ func (g *Guild) Leave(ctx context.Context, rest *REST) error {
 	return rest.LeaveGuild(ctx, g.ID)
 }
 
+func (g *Guild) GetEmoji(ctx context.Context, rest *REST, emojiID ID) (GuildEmoji, error) {
+	return rest.GetGuildEmoji(ctx, g.ID, emojiID)
+}
+
 func (g *Guild) CreateEmoji(ctx context.Context, rest *REST, opts CreateEmojiOpts) (GuildEmoji, error) {
 	return rest.CreateGuildEmoji(ctx, g.ID, opts)
 }
