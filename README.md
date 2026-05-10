@@ -59,6 +59,13 @@ func main() {
 		Auth:  token,
 		Cache: &cache,
 	}
+    gateway.SetPresence(flo.PresenceOpts{
+        Status: flo.UserStatusIdle,
+        CustomStatus: flo.CustomStatusOpts{
+            EmojiName: "💤",
+            Text: "chillin'",
+        },
+    })
 
 	gateway.ShardReady.OnceSync(func(r flo.ShardReadyEvent) {
 		fmt.Println("ready as " + r.User.Tag())

@@ -80,3 +80,13 @@ const (
 	UserNotifSettingsNoMessages   UserNotifSettings = 2
 	UserNotifSettingsInherit      UserNotifSettings = 3
 )
+
+type UserStatus string
+
+var (
+	UserStatusOnline       UserStatus = "online"
+	UserStatusOffline      UserStatus = "offline"
+	UserStatusIdle         UserStatus = "idle"
+	UserStatusDoNotDisturb UserStatus = "dnd"
+	UserStatusInvisible    UserStatus = "invisible"
+)

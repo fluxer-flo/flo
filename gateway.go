@@ -45,8 +45,6 @@ type Gateway struct {
 	// TotalShards is the total amount of shards that the bot will indicate it will use.
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
-	// InitialPresence specifies the presence each shard will start with.
-	InitialPresence PresenceOpts
 
 	// See gateway_events.go.
 	gatewayEvents
@@ -77,9 +75,8 @@ func (g *Gateway) initShards() {
 	g.shards = make([]*Shard, g.LastShard-g.FirstShard+1)
 	for id := uint(0); id <= g.LastShard-g.FirstShard; id++ {
 		g.shards[id] = &Shard{
-			gateway:  g,
-			id:       g.FirstShard + id,
-			presence: g.InitialPresence,
+			gateway: g,
+			id:      g.FirstShard + id,
 		}
 	}
 }
@@ -186,6 +183,16 @@ func (g *Gateway) Reconnect() error {
 	return errors.Join(errs...)
 }
 
+// SetPresence sets the presence to be used by all shards.
+// If a shard is currently connected it will be sent immediately, otherwise it will be sent the next time the shard connects.
+// This means you can call this before Start!
+// To set a presence for a specific shard, see [Shard.SetPresence].
+func (g *Gateway) SetPresence(opts PresenceOpts) {
+	for _, shard := range g.Shards() {
+		shard.SetPresence(opts)
+	}
+}
+
 type GatewayOpcode uint
 
 const (
@@ -248,7 +255,9 @@ type Shard struct {
 }
 
 type PresenceOpts struct {
-	Status       string           `json:"status"`
+	// Status specifies the status icon to set.
+	// By default, it will be [UserStatusOnline].
+	Status       UserStatus       `json:"status,omitempty"`
 	AFK          bool             `json:"afk"`
 	Mobile       bool             `json:"mobile"`
 	CustomStatus CustomStatusOpts `json:"custom_status,omitzero"`
@@ -370,13 +379,18 @@ func (s *Shard) Presence() PresenceOpts {
 	return s.presence
 }
 
-// SetPresence updates the presence on the shard.
+// SetPresence sets the presence to be used by the shard.
 // If the shard is currently connected it will be sent immediately, otherwise it will be sent the next time the shard connects.
-func (s *Shard) SetPresence(presence PresenceOpts) {
+// This means you can call this before Start!
+func (s *Shard) SetPresence(opts PresenceOpts) {
+	if opts.Status == "" {
+		opts.Status = UserStatusOnline
+	}
+
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	s.presence = presence
+	s.presence = opts
 	if !s.presencePending {
 		s.presencePending = true
 		if s.syncPresence != nil {
@@ -963,8 +977,8 @@ func (s *Shard) establishSession() error {
 		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
 
 		payload := gatewayIdentifyPayload{
-			Token:    s.gateway.Auth,
-			Shard:    [2]uint{s.id, s.gateway.TotalShards},
+			Token: s.gateway.Auth,
+			Shard: [2]uint{s.id, s.gateway.TotalShards},
 			Presence: presence,
 		}
 
