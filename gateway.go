@@ -217,14 +217,18 @@ type Shard struct {
 	id      uint
 
 	// stateMu is the mutex for the shared state of the shard.
-	stateMu        sync.RWMutex
-	running        bool
-	latency        time.Duration
-	reqDisconnect  context.CancelFunc
-	reqReconnect   bool
-	presence       PresenceOpts
-	syncPresence   chan struct{}
-	presenceSyncSent bool
+	stateMu       sync.RWMutex
+	running       bool
+	latency       time.Duration
+	reqDisconnect context.CancelFunc
+	reqReconnect  bool
+	presence      PresenceOpts
+	// syncPresence is used to notify the control loop of a presence update.
+	// It will be nil if there is no session currently connected to.
+	// If this is the case, when the next session is started or resumed the presence will be sent then.
+	syncPresence chan struct{}
+	// presencePending is set to true when the presence has been changed, and set to false once it has been sent.
+	presencePending bool
 	// (end of shared state - the remaining fields are only used by a single goroutine at a time)
 
 	conn              *websocket.Conn
@@ -373,9 +377,11 @@ func (s *Shard) SetPresence(presence PresenceOpts) {
 	defer s.stateMu.Unlock()
 
 	s.presence = presence
-	if s.syncPresence != nil && !s.presenceSyncSent {
-		s.syncPresence <- struct{}{}
-		s.presenceSyncSent = true
+	if !s.presencePending {
+		s.presencePending = true
+		if s.syncPresence != nil {
+			s.syncPresence <- struct{}{}
+		}
 	}
 }
 
@@ -437,7 +443,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		s.Stopped.emit(ShardStoppedEvent{s, stopErr})
 		s.gateway.ShardStopped.emit(ShardStoppedEvent{s, stopErr})
 
-		newRunning := s.gateway.runningShards.Add(math.MaxUint64) // -1
+		newRunning := s.gateway.runningShards.Add(math.MaxUint64 /* equivilent to uint64(-1) */)
 		if newRunning == 0 {
 			s.gateway.AllShardsStopped.emit(AllShardsStoppedEvent{s.gateway})
 		}
@@ -534,10 +540,6 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		s.gateway.ShardConnected.emit(ShardConnectedEvent{s})
 
 		connStartTime := time.Now()
-
-		s.stateMu.Lock()
-		s.syncPresence = make(chan struct{}, 1)
-		s.stateMu.Unlock()
 
 		s.conn = conn
 		s.inbound = make(chan GatewayPacket)
@@ -719,6 +721,19 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 	}
 }
 
+// queuePacket queues a packet.
+// This should only be used from the shard control goroutine.
+// To prevent deadlocking when the outbound buffer is full, an error is returned if a write error was signaled before the packet was received on the write goroutine.
+func (s *Shard) queuePacket(packet GatewayPacket) error {
+	select {
+	case s.outbound <- packet:
+		return nil
+	case err := <-s.writeErr:
+		s.writeErr = nil
+		return err
+	}
+}
+
 func (s *Shard) readLoop() {
 	for {
 		msgType, reader, err := s.conn.NextReader()
@@ -810,20 +825,18 @@ func (s *Shard) controlLoop(ctx context.Context) error {
 			}
 		case <-s.syncPresence:
 			s.stateMu.Lock()
-			s.presenceSyncSent = false
+			s.presencePending = false
 			data, err := json.Marshal(s.presence)
 			s.stateMu.Unlock()
 			if err != nil {
 				return fmt.Errorf("failed to marshal presence: %w", err)
 			}
 
-			packet := GatewayPacket{
+			err = s.queuePacket(GatewayPacket{
 				Opcode: GatewayOpPresenceUpdate,
 				Data:   data,
-			}
-			select {
-			case s.outbound <- packet:
-			case err := <-s.writeErr:
+			})
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -936,17 +949,24 @@ type gatewayResumePayload struct {
 }
 
 func (s *Shard) establishSession() error {
+	s.stateMu.Lock()
+	presence := s.presence
+	presencePending := s.presencePending
+	if presencePending {
+		s.presencePending = false
+	}
+
+	s.syncPresence = make(chan struct{}, 1)
+	s.stateMu.Unlock()
+
 	if s.sessionID == "" {
 		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
 
 		payload := gatewayIdentifyPayload{
-			Token: s.gateway.Auth,
-			Shard: [2]uint{s.id, s.gateway.TotalShards},
+			Token:    s.gateway.Auth,
+			Shard:    [2]uint{s.id, s.gateway.TotalShards},
+			Presence: presence,
 		}
-
-		s.stateMu.RLock()
-		payload.Presence = s.presence
-		s.stateMu.RUnlock()
 
 		payload.Properties.OS = runtime.GOOS
 		payload.Properties.Browser = defaultUserAgent
@@ -957,13 +977,11 @@ func (s *Shard) establishSession() error {
 			return fmt.Errorf("failed to marshal Identify packet data: %w", err)
 		}
 
-		packet := GatewayPacket{
+		err = s.queuePacket(GatewayPacket{
 			Opcode: GatewayOpIdentify,
 			Data:   data,
-		}
-		select {
-		case s.outbound <- packet:
-		case err := <-s.writeErr:
+		})
+		if err != nil {
 			return err
 		}
 	} else {
@@ -980,16 +998,29 @@ func (s *Shard) establishSession() error {
 			return fmt.Errorf("failed to marshal Resume packet data: %w", err)
 		}
 
-		packet := GatewayPacket{
+		err = s.queuePacket(GatewayPacket{
 			Opcode: GatewayOpResume,
 			Data:   data,
-		}
-
-		select {
-		case s.outbound <- packet:
-		case err := <-s.writeErr:
+		})
+		if err != nil {
 			return err
 		}
+
+		if presencePending {
+			data, err := json.Marshal(presence)
+			if err != nil {
+				return fmt.Errorf("failed to marshal presence: %w", err)
+			}
+
+			err = s.queuePacket(GatewayPacket{
+				Opcode: GatewayOpPresenceUpdate,
+				Data:   data,
+			})
+			if err != nil {
+				return err
+			}
+		}
+
 	}
 
 	return nil
@@ -1500,6 +1531,7 @@ func (s *Shard) sendHeartbeat() error {
 	select {
 	case s.outbound <- packet:
 	case err := <-s.writeErr:
+		s.writeErr = nil
 		return err
 	}
 
