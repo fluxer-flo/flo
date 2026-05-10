@@ -217,13 +217,14 @@ type Shard struct {
 	id      uint
 
 	// stateMu is the mutex for the shared state of the shard.
-	stateMu       sync.RWMutex
-	running       bool
-	latency       time.Duration
-	reqDisconnect context.CancelFunc
-	reqReconnect  bool
-	presence      PresenceOpts
-	syncPresence  chan struct{}
+	stateMu        sync.RWMutex
+	running        bool
+	latency        time.Duration
+	reqDisconnect  context.CancelFunc
+	reqReconnect   bool
+	presence       PresenceOpts
+	syncPresence   chan struct{}
+	presenceSyncSent bool
 	// (end of shared state - the remaining fields are only used by a single goroutine at a time)
 
 	conn              *websocket.Conn
@@ -372,9 +373,9 @@ func (s *Shard) SetPresence(presence PresenceOpts) {
 	defer s.stateMu.Unlock()
 
 	s.presence = presence
-	if s.syncPresence != nil {
+	if s.syncPresence != nil && !s.presenceSyncSent {
 		s.syncPresence <- struct{}{}
-		s.syncPresence = nil
+		s.presenceSyncSent = true
 	}
 }
 
@@ -557,9 +558,6 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		s.stateMu.Lock()
 		s.latency = 0
-
-		close(s.syncPresence)
-		_, _ = <-s.syncPresence
 		s.syncPresence = nil
 		s.stateMu.Unlock()
 
@@ -812,7 +810,7 @@ func (s *Shard) controlLoop(ctx context.Context) error {
 			}
 		case <-s.syncPresence:
 			s.stateMu.Lock()
-			s.syncPresence = make(chan struct{}, 1)
+			s.presenceSyncSent = false
 			data, err := json.Marshal(s.presence)
 			s.stateMu.Unlock()
 			if err != nil {
