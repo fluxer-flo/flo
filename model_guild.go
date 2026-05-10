@@ -224,6 +224,22 @@ func (g *Guild) DeleteGuildEmoji(ctx context.Context, rest *REST, emojiID ID) er
 	return rest.DeleteGuildEmoji(ctx, g.ID, emojiID)
 }
 
+func (g *Guild) GetSticker(ctx context.Context, rest *REST, stickerID ID) (GuildSticker, error) {
+	return rest.GetGuildSticker(ctx, g.ID, stickerID)
+}
+
+func (g *Guild) CreateSticker(ctx context.Context, rest *REST, opts CreateGuildStickerOpts) (GuildSticker, error) {
+	return rest.CreateGuildSticker(ctx, g.ID, opts)
+}
+
+func (g *Guild) UpdateSticker(ctx context.Context, rest *REST, stickerID ID, opts UpdateGuildStickerOpts) (GuildSticker, error) {
+	return rest.UpdateGuildSticker(ctx, g.ID, stickerID, opts)
+}
+
+func (g *Guild) DeleteSticker(ctx context.Context, rest *REST, stickerID ID) error {
+	return rest.DeleteGuildSticker(ctx, g.ID, stickerID)
+}
+
 func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
 	oldRoles := g.Roles
