@@ -128,6 +128,10 @@ func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildC
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }
 
+func (g *Guild) GetRole(ctx context.Context, rest *REST, roleID ID) (Role, error) {
+	return rest.GetRole(ctx, g.ID, roleID)
+}
+
 func (g *Guild) CreateRole(ctx context.Context, rest *REST, opts CreateRoleOpts) (Role, error) {
 	return rest.CreateRole(ctx, g.ID, opts)
 }

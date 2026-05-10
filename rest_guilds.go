@@ -49,6 +49,26 @@ func (r *REST) CreateGuildChannel(ctx context.Context, guildID ID, opts CreateGu
 	return resp, nil
 }
 
+func (r *REST) GetRole(ctx context.Context, guildID ID, roleID ID) (Role, error)  {
+	var resp Role
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "GET",
+		Path:    fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket:  fmt.Sprintf("guild:role:read:%d", guildID),
+	}, &resp)
+	if err != nil {
+		return Role{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			guild.Roles.Set(resp.ID, resp)
+		}
+	}
+
+	return resp, nil
+}
+
 type CreateRoleOpts struct {
 	Name  string   `json:"name"`
 	Color ColorInt `json:"color"`
