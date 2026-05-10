@@ -132,6 +132,14 @@ func (g *Guild) CreateRole(ctx context.Context, rest *REST, opts CreateRoleOpts)
 	return rest.CreateRole(ctx, g.ID, opts)
 }
 
+func (g *Guild) UpdateRole(ctx context.Context, rest *REST, roleID ID, opts UpdateRoleOpts) (Role, error) {
+	return rest.UpdateRole(ctx, g.ID, roleID, opts)
+}
+
+func (g *Guild) DeleteRole(ctx context.Context, rest *REST, roleID ID) error {
+	return rest.DeleteRole(ctx, g.ID, roleID)
+}
+
 func (g *Guild) GetMember(ctx context.Context, rest *REST, userID ID) (Member, error) {
 	return rest.GetMember(ctx, g.ID, userID)
 }

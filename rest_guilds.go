@@ -76,6 +76,45 @@ func (r *REST) CreateRole(ctx context.Context, guildID ID, opts CreateRoleOpts) 
 	return resp, nil
 }
 
+type UpdateRoleOpts struct {
+	Name          *string   `json:"name,omitempty"`
+	Color         *ColorInt `json:"color,omitempty"`
+	Perms         *Perms    `json:"permissions,omitempty"`
+	Hoist         *bool     `json:"hoist,omitempty"`
+	HoistPosition *int      `json:"hoist_position,omitempty"`
+	Mentionable   *bool     `json:"mentionable,omitempty"`
+	// TODO: audit log reason??
+}
+
+func (r *REST) UpdateRole(ctx context.Context, guildID ID, roleID ID, opts UpdateRoleOpts) (Role, error) {
+	var resp Role
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket:  fmt.Sprintf("guild:role:update:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Role{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			guild.Roles.Set(resp.ID, resp)
+		}
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteRole(ctx context.Context, guildID ID, roleID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path: fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket: fmt.Sprintf("guild:role:delete:%d", guildID),
+	})
+}
+
 type GetMembersOpts struct {
 	// Limit is specified as limit=... in the URL if not 0.
 	Limit int
