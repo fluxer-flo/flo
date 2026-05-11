@@ -50,12 +50,16 @@ func main() {
 
 	// REST is used to perform actions through Fluxer's REST HTTP API
 	rest := flo.REST{
-		Auth:  token,
+        // Auth can be omitted, for example if you're just using webhooks
+        // Note that this will cause ratelimits to be done based on IP instead
+        // Cache is also optional, omitting it will simply stop requests populating the cache
+		Auth:  token, 
 		Cache: &cache,
 	}
 
 	// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
 	gateway := flo.Gateway{
+        // Auth is required, but cache can be omitted to stop events from populating the cache (not recommended)
 		Auth:  token,
 		Cache: &cache,
 	}

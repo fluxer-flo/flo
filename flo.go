@@ -1,7 +1,10 @@
 // Package flo provides a high-level way to use the Fluxer API.
 package flo
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+	"strings"
+)
 
 var libVersion = func() string {
 	build, ok := debug.ReadBuildInfo()
@@ -27,3 +30,14 @@ var defaultUserAgent = func() string {
 
 	return "flo/" + version
 }()
+
+func redact(str string) string {
+	var result strings.Builder
+	result.Grow(len(str))
+
+	for range str {
+		result.WriteByte('*')
+	}
+
+	return result.String()
+}

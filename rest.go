@@ -50,8 +50,10 @@ var defaultAPIURL = func() *url.URL {
 type RESTRequest struct {
 	Method string
 	Path   string
-	Query  string
-	Bucket string
+	// RedactedPath is the path with any tokens redacted to be used in errors.
+	RedactedPath string
+	Query        string
+	Bucket       string
 
 	// Payload specifies a JSON body.
 	// If used in combination with Form, it will be added as payload_json.
@@ -96,20 +98,23 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 	httpURL = httpURL.JoinPath(req.Path)
 	httpURL.RawQuery = req.Query
 
+	httpReq := &http.Request{
+		Method: req.Method,
+		URL:    httpURL,
+		Header: map[string][]string{},
+	}
+	httpReq = httpReq.WithContext(ctx)
+
 	userAgent := r.UserAgent
 	if userAgent == "" {
 		userAgent = defaultUserAgent
 	}
+	httpReq.Header.Set("User-Agent", userAgent)
 
-	httpReq := &http.Request{
-		Method: req.Method,
-		URL:    httpURL,
-		Header: map[string][]string{
-			"Authorization": {r.Auth},
-			"User-Agent":    {userAgent},
-		},
+	if r.Auth != "" {
+		httpReq.Header.Set("Authorization", r.Auth)
 	}
-	httpReq = httpReq.WithContext(ctx)
+
 	if req.AuditLogReason != "" {
 		httpReq.Header.Set("X-Audit-Log-Reason", req.AuditLogReason)
 	}
@@ -176,7 +181,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 			resp.Body.Close()
 			return nil, errors.New("could not parse X-RateLimit-Remaining")
 		}
-			
+
 		reset, err := strconv.ParseInt(rateLimitReset, 10, 64)
 		if err != nil {
 			resp.Body.Close()
@@ -199,6 +204,11 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		}
 		defer resp.Body.Close()
 
+		redactedPath := req.RedactedPath
+		if redactedPath == "" {
+			redactedPath = req.Path
+		}
+
 		contentType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse error response Content-Type: %w", err)
@@ -210,7 +220,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		}
 
 		if contentType != "application/json" {
-			httpErr := RESTHTTPError{req.Path, *resp}
+			httpErr := RESTHTTPError{redactedPath, *resp}
 			httpErr.Response.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			return nil, &httpErr
 		}
@@ -222,13 +232,13 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 
 		err = json.Unmarshal(bodyBytes, &rawErr)
 		if err != nil || rawErr.Code == "" {
-			httpErr := RESTHTTPError{req.Path, *resp}
+			httpErr := RESTHTTPError{redactedPath, *resp}
 			httpErr.Response.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			return nil, &httpErr
 		}
 
 		return nil, &RESTAPIError{
-			Path:    req.Path,
+			Path:    redactedPath,
 			Status:  resp.StatusCode,
 			Code:    rawErr.Code,
 			Message: rawErr.Message,
