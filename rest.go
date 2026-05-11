@@ -87,6 +87,10 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		}
 	}()
 
+	if req.Method == "" {
+		req.Method = "GET"
+	}
+
 	httpURL := r.BaseURL
 	if httpURL == nil {
 		httpURL = defaultAPIURL
@@ -200,7 +204,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 
 	if resp.StatusCode >= 400 && resp.StatusCode <= 599 {
 		if resp.Body == nil {
-			return nil, &RESTHTTPError{req.Path, *resp}
+			return nil, &RESTHTTPError{req.Method, req.Path, *resp}
 		}
 		defer resp.Body.Close()
 
@@ -220,7 +224,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 		}
 
 		if contentType != "application/json" {
-			httpErr := RESTHTTPError{redactedPath, *resp}
+			httpErr := RESTHTTPError{req.Method, redactedPath, *resp}
 			httpErr.Response.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			return nil, &httpErr
 		}
@@ -232,12 +236,13 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 
 		err = json.Unmarshal(bodyBytes, &rawErr)
 		if err != nil || rawErr.Code == "" {
-			httpErr := RESTHTTPError{redactedPath, *resp}
+			httpErr := RESTHTTPError{req.Method, redactedPath, *resp}
 			httpErr.Response.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			return nil, &httpErr
 		}
 
 		return nil, &RESTAPIError{
+			Method:  req.Method,
 			Path:    redactedPath,
 			Status:  resp.StatusCode,
 			Code:    rawErr.Code,
@@ -333,6 +338,7 @@ func encodeRESTForm(req RESTRequest) (io.ReadCloser, string, error) {
 
 // RESTAPIError represents an API error from Fluxer in the expected format.
 type RESTAPIError struct {
+	Method  string
 	Path    string
 	Status  int
 	Code    RESTErrorCode
@@ -340,18 +346,19 @@ type RESTAPIError struct {
 }
 
 func (r *RESTAPIError) Error() string {
-	return fmt.Sprintf("API error on %s: %s (%s)", r.Path, r.Message, r.Code)
+	return fmt.Sprintf("API error on %s %s: %s (%s)", r.Method, r.Path, r.Message, r.Code)
 }
 
 // RESTHTTPError represents an error response in an unexpected format.
 // Unlike a typical [http.Response], the body does not need to be closed.
 type RESTHTTPError struct {
+	Method   string
 	Path     string
 	Response http.Response
 }
 
 func (r *RESTHTTPError) Error() string {
-	return fmt.Sprintf("unexpected HTTP %s on %s", r.Response.Status, r.Path)
+	return fmt.Sprintf("unexpected HTTP %s on %s %s", r.Response.Status, r.Method, r.Path)
 }
 
 // IsRESTError is a convinience method to check for one of a list of REST error codes.
