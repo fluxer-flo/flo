@@ -190,6 +190,15 @@ type AllowedMentions struct {
 	RepliedUser *bool                  `json:"replied_user,omitempty"`
 }
 
+// AllowedMentionsNone is an [AllowedMentions] value which disables all mentions.
+var AllowedMentionsNone = func() AllowedMentions {
+	f := false
+	return AllowedMentions{
+		Parse:       []AllowedMentionsParse{},
+		RepliedUser: &f,
+	}
+}()
+
 type AllowedMentionsParse string
 
 const (

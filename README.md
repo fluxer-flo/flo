@@ -55,6 +55,8 @@ func main() {
         // Cache is also optional, omitting it will simply stop requests populating the cache
 		Auth:  token, 
 		Cache: &cache,
+        // Recommended - disable all mentions unless AllowedMentions is explicitly specified for a message
+        DefaultAllowedMentions: &flo.AllowedMentionsNone,
 	}
 
 	// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
