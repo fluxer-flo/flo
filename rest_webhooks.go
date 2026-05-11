@@ -105,3 +105,17 @@ func (r *REST) EditWebhookMessage(ctx context.Context, auth WebhookAuth, message
 	cacheMessage(&resp, r.Cache)
 	return resp, nil
 }
+
+// EditWebhookMessage deletes a message sent by a webhook using its token.
+func (r *REST) DeleteWebhookMessage(ctx context.Context, auth WebhookAuth, messageID ID) error {
+	const pathFmt = "/v1/webhooks/%d/%s/messages/%d"
+
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		// NOTE: path escaping token to prevent abuse of .. (just in case)
+		Path:         fmt.Sprintf(pathFmt, auth.ID, url.PathEscape(auth.Token), messageID),
+		RedactedPath: fmt.Sprintf(pathFmt, auth.ID, redact(auth.Token), messageID),
+		Bucket:       fmt.Sprintf("webhook:message_delete:%d", auth.ID),
+	})
+
+}
