@@ -49,7 +49,9 @@ var defaultAPIURL = func() *url.URL {
 
 type RESTRequest struct {
 	Method string
-	Path   string
+	// Path is the request path appended to the base URL.
+	// It should contain the API version as /v[num].
+	Path string
 	// RedactedPath is the path with any tokens redacted to be used in errors.
 	RedactedPath string
 	Query        string
