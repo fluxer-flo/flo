@@ -160,6 +160,14 @@ func (c *Channel) RemoveAllReactions(ctx context.Context, rest *REST, msgID ID) 
 	return rest.RemoveAllReactions(ctx, c.ID, msgID)
 }
 
+func (c *Channel) CreateWebhook(ctx context.Context, rest *REST, opts CreateWebhookOpts) (Webhook, error) {
+	return rest.CreateWebhook(ctx, c.ID, opts)
+}
+
+func (c *Channel) GetWebhooks(ctx context.Context, rest *REST) ([]Webhook, error) {
+	return rest.GetChannelWebhooks(ctx, c.ID)
+}
+
 func (c *Channel) updateProperties(channel *Channel) {
 	oldMessages := c.Messages
 	*c = *channel

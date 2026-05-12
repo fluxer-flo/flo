@@ -240,6 +240,10 @@ func (g *Guild) DeleteSticker(ctx context.Context, rest *REST, stickerID ID) err
 	return rest.DeleteGuildSticker(ctx, g.ID, stickerID)
 }
 
+func (g *Guild) GetWebhooks(ctx context.Context, rest *REST) ([]Webhook, error) {
+	return rest.GetGuildWebhooks(ctx, g.ID)
+}
+
 func (g *Guild) updateProperties(guild *Guild) {
 	oldChannels := g.Channels
 	oldRoles := g.Roles

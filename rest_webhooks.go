@@ -11,6 +11,118 @@ type WebhookAuth struct {
 	Token string
 }
 
+// GetWebhook gets the webhook by the provided ID, so long as the authenticated user has [PermManageWebhooks].
+func (r *REST) GetWebhook(ctx context.Context, webhookID ID) (Webhook, error) {
+	var resp Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/webhooks/%d", webhookID),
+		Bucket: fmt.Sprintf("webhook:read:%d", webhookID),
+	}, &resp)
+	if err != nil {
+		return Webhook{}, err
+	}
+
+	return resp, nil
+
+}
+
+// GetWebhookWithAuth gets the webhook by the provided ID using the provided token.
+func (r *REST) GetWebhookWithAuth(ctx context.Context, auth WebhookAuth) (Webhook, error) {
+	const pathFmt = "/v1/webhooks/%d/%s"
+
+	var resp Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		// NOTE: path escaping token to prevent abuse of .. (just in case)
+		Path:         fmt.Sprintf(pathFmt, auth.ID, url.PathEscape(auth.Token)),
+		RedactedPath: fmt.Sprintf(pathFmt, auth.ID, redact(auth.Token)),
+		Bucket:       fmt.Sprintf("webhook:read:%d", auth.ID),
+	}, &resp)
+	if err != nil {
+		return Webhook{}, err
+	}
+
+	return resp, nil
+}
+
+func (r *REST) GetGuildWebhooks(ctx context.Context, channelID ID) ([]Webhook, error) {
+	var resp []Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/webhooks", channelID),
+		Bucket: fmt.Sprintf("webhook:list:%d", channelID),
+	}, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (r *REST) GetChannelWebhooks(ctx context.Context, channelID ID) ([]Webhook, error) {
+	var resp []Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/channels/%d/webhooks", channelID),
+		Bucket: fmt.Sprintf("webhook:list:%d", channelID),
+	}, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+type CreateWebhookOpts struct {
+	Name string `json:"name"`
+	// Avatar is the webhook avatar in base64.
+	Avatar string `json:"avatar,omitempty"`
+}
+
+func (r *REST) CreateWebhook(ctx context.Context, channelID ID, opts CreateWebhookOpts) (Webhook, error) {
+	var resp Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "POST",
+		Path:   fmt.Sprintf("/v1/channels/%d/webhooks", channelID),
+		Bucket: fmt.Sprintf("webhook:create:%d", channelID),
+	}, &resp)
+	if err != nil {
+		return Webhook{}, err
+	}
+
+	return resp, nil
+}
+
+type UpdateWebhookOpts struct {
+	Name *string `json:"name,omitempty"`
+	// Avatar is the webhook avatar in base64.
+	Avatar *string `json:"avatar,omitempty"`
+}
+
+func (r *REST) UpdateWebhook(ctx context.Context, webhookID ID, opts UpdateWebhookOpts) (Webhook, error) {
+	var resp Webhook
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/webhooks/%d", webhookID),
+		Bucket:  fmt.Sprintf("webhook:update:%d", webhookID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Webhook{}, err
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteWebhook(ctx context.Context, webhookID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/webhooks/%d", webhookID),
+		Bucket: fmt.Sprintf("webhook:delete:%d", webhookID),
+	})
+}
+
 type ExecWebhookOpts struct {
 	Content          string                 `json:"content,omitempty"`
 	Embeds           []EmbedOpts            `json:"embeds,omitempty"`
@@ -106,7 +218,7 @@ func (r *REST) EditWebhookMessage(ctx context.Context, auth WebhookAuth, message
 	return resp, nil
 }
 
-// EditWebhookMessage deletes a message sent by a webhook using its token.
+// DeleteWebhookMessage deletes a message sent by a webhook using its token.
 func (r *REST) DeleteWebhookMessage(ctx context.Context, auth WebhookAuth, messageID ID) error {
 	const pathFmt = "/v1/webhooks/%d/%s/messages/%d"
 
@@ -117,5 +229,4 @@ func (r *REST) DeleteWebhookMessage(ctx context.Context, auth WebhookAuth, messa
 		RedactedPath: fmt.Sprintf(pathFmt, auth.ID, redact(auth.Token), messageID),
 		Bucket:       fmt.Sprintf("webhook:message_delete:%d", auth.ID),
 	})
-
 }
