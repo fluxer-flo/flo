@@ -12,7 +12,7 @@ type Webhook struct {
 	Avatar    *string `json:"avatar"`
 }
 
-// Auth returns a [WebhookAuth] value which can be used to perform actions
+// Auth returns a [WebhookAuth] value which can be used to perform actions through the webhook.
 func (w *Webhook) Auth() WebhookAuth {
 	return WebhookAuth{w.ID, w.Token}
 }
