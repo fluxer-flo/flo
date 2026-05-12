@@ -415,7 +415,7 @@ func (r *REST) GetGuildEmoji(ctx context.Context, guildID ID, emojiID ID) (Guild
 		Method: "GET",
 		Path:   fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
 		Bucket: fmt.Sprintf("guild:emojis:read:%d", guildID),
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildEmoji{}, err
 	}
@@ -445,7 +445,7 @@ func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateGuil
 		Path:    fmt.Sprintf("/v1/guilds/%d/emojis", guildID),
 		Bucket:  fmt.Sprintf("guild:emojis:create:%d", guildID),
 		Payload: opts,
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildEmoji{}, err
 	}
@@ -472,7 +472,7 @@ func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opt
 		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
 		Bucket:  fmt.Sprintf("guild:emojis:update:%d", guildID),
 		Payload: opts,
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildEmoji{}, err
 	}
@@ -502,7 +502,7 @@ func (r *REST) GetGuildSticker(ctx context.Context, guildID ID, stickerID ID) (G
 		Method: "GET",
 		Path:   fmt.Sprintf("/v1/guilds/%d/stickers/%d", guildID, stickerID),
 		Bucket: fmt.Sprintf("guild:stickers:read:%d", guildID),
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildSticker{}, err
 	}
@@ -534,7 +534,7 @@ func (r *REST) CreateGuildSticker(ctx context.Context, guildID ID, opts CreateGu
 		Path:    fmt.Sprintf("/v1/guilds/%d/stickers", guildID),
 		Bucket:  fmt.Sprintf("guild:stickers:create:%d", guildID),
 		Payload: opts,
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildSticker{}, err
 	}
@@ -563,7 +563,7 @@ func (r *REST) UpdateGuildSticker(ctx context.Context, guildID ID, stickerID ID,
 		Path:    fmt.Sprintf("/v1/guilds/%d/stickers/%d", guildID, stickerID),
 		Bucket:  fmt.Sprintf("guild:stickers:update:%d", guildID),
 		Payload: opts,
-	}, resp)
+	}, &resp)
 	if err != nil {
 		return GuildSticker{}, err
 	}
