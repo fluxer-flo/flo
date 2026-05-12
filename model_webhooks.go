@@ -17,14 +17,26 @@ func (w *Webhook) Auth() WebhookAuth {
 	return WebhookAuth{w.ID, w.Token}
 }
 
+// Path returns the path of the webhook URL with a leading slash.
+// It can be appended to the base API URL to form the webhook URL.
+func (w *Webhook) Path() string {
+	return w.Auth().Path()
+}
+
 func (w *Webhook) Update(ctx context.Context, rest *REST, opts UpdateWebhookOpts) error {
-	webhook, err := rest.UpdateWebhook(ctx, w.ID, opts)
+	webhook, err := rest.UpdateWebhookWithAuth(ctx, w.Auth(), opts)
 	if err != nil {
 		return err
 	}
 
+	oldUser := w.User
 	*w = webhook
+	w.User = oldUser
 	return nil
+}
+
+func (w *Webhook) Delete(ctx context.Context, rest *REST) error {
+	return rest.DeleteWebhookWithAuth(ctx, w.Auth())
 }
 
 func (w *Webhook) Exec(ctx context.Context, rest *REST, opts ExecWebhookOpts) error {
