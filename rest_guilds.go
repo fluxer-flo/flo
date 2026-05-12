@@ -417,7 +417,7 @@ func (r *REST) GetGuildEmoji(ctx context.Context, guildID ID, emojiID ID) (Guild
 		Bucket: fmt.Sprintf("guild:emojis:read:%d", guildID),
 	}, resp)
 	if err != nil {
-		return GuildEmoji{}, nil
+		return GuildEmoji{}, err
 	}
 
 	if r.Cache != nil {
@@ -447,7 +447,7 @@ func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateGuil
 		Payload: opts,
 	}, resp)
 	if err != nil {
-		return GuildEmoji{}, nil
+		return GuildEmoji{}, err
 	}
 
 	if r.Cache != nil {
@@ -474,7 +474,7 @@ func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opt
 		Payload: opts,
 	}, resp)
 	if err != nil {
-		return GuildEmoji{}, nil
+		return GuildEmoji{}, err
 	}
 
 	if r.Cache != nil {
@@ -504,7 +504,7 @@ func (r *REST) GetGuildSticker(ctx context.Context, guildID ID, stickerID ID) (G
 		Bucket: fmt.Sprintf("guild:stickers:read:%d", guildID),
 	}, resp)
 	if err != nil {
-		return GuildSticker{}, nil
+		return GuildSticker{}, err
 	}
 
 	if r.Cache != nil {
@@ -536,7 +536,7 @@ func (r *REST) CreateGuildSticker(ctx context.Context, guildID ID, opts CreateGu
 		Payload: opts,
 	}, resp)
 	if err != nil {
-		return GuildSticker{}, nil
+		return GuildSticker{}, err
 	}
 
 	if r.Cache != nil {
@@ -565,7 +565,7 @@ func (r *REST) UpdateGuildSticker(ctx context.Context, guildID ID, stickerID ID,
 		Payload: opts,
 	}, resp)
 	if err != nil {
-		return GuildSticker{}, nil
+		return GuildSticker{}, err
 	}
 
 	if r.Cache != nil {
