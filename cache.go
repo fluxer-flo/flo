@@ -556,3 +556,13 @@ func cacheCurrentUser(user *UserPrivate, cache *Cache) {
 	cache.UpdateCurrentUser(*user)
 	cache.Users.Set(user.ID, user.User)
 }
+
+func cacheWebhook(webhook *Webhook, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	if webhook.User != nil {
+		cache.Users.Set(webhook.User.ID, *webhook.User)
+	}
+}

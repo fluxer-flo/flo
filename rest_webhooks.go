@@ -33,6 +33,7 @@ func (r *REST) GetWebhook(ctx context.Context, webhookID ID) (Webhook, error) {
 		return Webhook{}, err
 	}
 
+	cacheWebhook(&resp, r.Cache)
 	return resp, nil
 
 }
@@ -51,6 +52,7 @@ func (r *REST) GetWebhookWithAuth(ctx context.Context, auth WebhookAuth) (Webhoo
 		return Webhook{}, err
 	}
 
+	cacheWebhook(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -66,6 +68,10 @@ func (r *REST) GetGuildWebhooks(ctx context.Context, channelID ID) ([]Webhook, e
 		return nil, err
 	}
 
+	for _, webhook := range resp {
+		cacheWebhook(&webhook, r.Cache)
+	}
+
 	return resp, nil
 }
 
@@ -79,6 +85,10 @@ func (r *REST) GetChannelWebhooks(ctx context.Context, channelID ID) ([]Webhook,
 	}, &resp)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, webhook := range resp {
+		cacheWebhook(&webhook, r.Cache)
 	}
 
 	return resp, nil
@@ -101,6 +111,7 @@ func (r *REST) CreateWebhook(ctx context.Context, channelID ID, opts CreateWebho
 		return Webhook{}, err
 	}
 
+	cacheWebhook(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -122,6 +133,7 @@ func (r *REST) UpdateWebhook(ctx context.Context, webhookID ID, opts UpdateWebho
 		return Webhook{}, err
 	}
 
+	cacheWebhook(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -140,6 +152,7 @@ func (r *REST) UpdateWebhookWithAuth(ctx context.Context, auth WebhookAuth, opts
 		return Webhook{}, err
 	}
 
+	cacheWebhook(&resp, r.Cache)
 	return resp, nil
 }
 
