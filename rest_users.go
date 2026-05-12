@@ -13,7 +13,7 @@ func (r *REST) GetUser(ctx context.Context, userID ID) (User, error) {
 		Bucket: fmt.Sprintf("users:read:%d", userID),
 	}, &result)
 	if err != nil {
-		return User{}, nil
+		return User{}, err
 	}
 
 	if r.Cache != nil {
@@ -31,7 +31,7 @@ func (r *REST) GetCurrentUser(ctx context.Context) (UserPrivate, error) {
 		Bucket: "users:settings:get",
 	}, &result)
 	if err != nil {
-		return UserPrivate{}, nil
+		return UserPrivate{}, err
 	}
 
 	cacheCurrentUser(&result, r.Cache)

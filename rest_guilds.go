@@ -49,6 +49,28 @@ func (r *REST) CreateGuildChannel(ctx context.Context, guildID ID, opts CreateGu
 	return resp, nil
 }
 
+func (r *REST) GetRole(ctx context.Context, guildID ID, roleID ID) (Role, error) {
+	var resp Role
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket: fmt.Sprintf("guild:role:read:%d", guildID),
+	}, &resp)
+	if err != nil {
+		return Role{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
 type CreateRoleOpts struct {
 	Name  string   `json:"name"`
 	Color ColorInt `json:"color"`
@@ -69,11 +91,54 @@ func (r *REST) CreateRole(ctx context.Context, guildID ID, opts CreateRoleOpts) 
 
 	if r.Cache != nil {
 		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
-			guild.Roles.Set(resp.ID, resp)
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
 		}
 	}
 
 	return resp, nil
+}
+
+type UpdateRoleOpts struct {
+	Name          *string   `json:"name,omitempty"`
+	Color         *ColorInt `json:"color,omitempty"`
+	Perms         *Perms    `json:"permissions,omitempty"`
+	Hoist         *bool     `json:"hoist,omitempty"`
+	HoistPosition *int      `json:"hoist_position,omitempty"`
+	Mentionable   *bool     `json:"mentionable,omitempty"`
+	// TODO: audit log reason??
+}
+
+func (r *REST) UpdateRole(ctx context.Context, guildID ID, roleID ID, opts UpdateRoleOpts) (Role, error) {
+	var resp Role
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket:  fmt.Sprintf("guild:role:update:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Role{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Roles != nil {
+				guild.Roles.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteRole(ctx context.Context, guildID ID, roleID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/guilds/%d/roles/%d", guildID, roleID),
+		Bucket: fmt.Sprintf("guild:role:delete:%d", guildID),
+	})
 }
 
 type GetMembersOpts struct {
@@ -341,5 +406,183 @@ func (r *REST) RemoveGuildBanWithReason(ctx context.Context, guildID ID, userID 
 		Path:           fmt.Sprintf("/v1/guilds/%d/bans/%d", guildID, userID),
 		Bucket:         fmt.Sprintf("guild:member:remove:%d", guildID),
 		AuditLogReason: reason,
+	})
+}
+
+func (r *REST) GetGuildEmoji(ctx context.Context, guildID ID, emojiID ID) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket: fmt.Sprintf("guild:emojis:read:%d", guildID),
+	}, &resp)
+	if err != nil {
+		return GuildEmoji{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+
+}
+
+type CreateGuildEmojiOpts struct {
+	Name string `json:"name"`
+	// Image is the base64 encoded image of the emoji.
+	Image string `json:"image"`
+}
+
+func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateGuildEmojiOpts) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis", guildID),
+		Bucket:  fmt.Sprintf("guild:emojis:create:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return GuildEmoji{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+type UpdateGuildEmojiOpts struct {
+	Name *string `json:"name,omitempty"`
+}
+
+func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opts UpdateGuildEmojiOpts) (GuildEmoji, error) {
+	var resp GuildEmoji
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket:  fmt.Sprintf("guild:emojis:update:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return GuildEmoji{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Emojis != nil {
+				guild.Emojis.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteGuildEmoji(ctx context.Context, guildID ID, emojiID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/guilds/%d/emojis/%d", guildID, emojiID),
+		Bucket: fmt.Sprintf("guild:emojis:delete:%d", guildID),
+	})
+}
+
+func (r *REST) GetGuildSticker(ctx context.Context, guildID ID, stickerID ID) (GuildSticker, error) {
+	var resp GuildSticker
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method: "GET",
+		Path:   fmt.Sprintf("/v1/guilds/%d/stickers/%d", guildID, stickerID),
+		Bucket: fmt.Sprintf("guild:stickers:read:%d", guildID),
+	}, &resp)
+	if err != nil {
+		return GuildSticker{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Stickers != nil {
+				guild.Stickers.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+
+}
+
+type CreateGuildStickerOpts struct {
+	Name string `json:"name"`
+	// Image is the base64 encoded image of the sticker.
+	Image       string   `json:"image"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+func (r *REST) CreateGuildSticker(ctx context.Context, guildID ID, opts CreateGuildStickerOpts) (GuildSticker, error) {
+	var resp GuildSticker
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/guilds/%d/stickers", guildID),
+		Bucket:  fmt.Sprintf("guild:stickers:create:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return GuildSticker{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Stickers != nil {
+				guild.Stickers.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+type UpdateGuildStickerOpts struct {
+	Name        *string  `json:"name,omitempty"`
+	Description *string  `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitzero"`
+}
+
+func (r *REST) UpdateGuildSticker(ctx context.Context, guildID ID, stickerID ID, opts UpdateGuildStickerOpts) (GuildSticker, error) {
+	var resp GuildSticker
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d/stickers/%d", guildID, stickerID),
+		Bucket:  fmt.Sprintf("guild:stickers:update:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return GuildSticker{}, err
+	}
+
+	if r.Cache != nil {
+		if guild, ok := r.Cache.Guilds.Get(guildID); ok {
+			if guild.Stickers != nil {
+				guild.Stickers.Set(resp.ID, resp)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+func (r *REST) DeleteGuildSticker(ctx context.Context, guildID ID, emojiID ID) error {
+	return r.RequestNoContent(ctx, RESTRequest{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/v1/guilds/%d/stickers/%d", guildID, emojiID),
+		Bucket: fmt.Sprintf("guild:stickers:delete:%d", guildID),
 	})
 }

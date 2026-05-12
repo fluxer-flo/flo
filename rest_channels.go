@@ -190,6 +190,15 @@ type AllowedMentions struct {
 	RepliedUser *bool                  `json:"replied_user,omitempty"`
 }
 
+// AllowedMentionsNone is an [AllowedMentions] value which disables all mentions.
+var AllowedMentionsNone = func() AllowedMentions {
+	f := false
+	return AllowedMentions{
+		Parse:       []AllowedMentionsParse{},
+		RepliedUser: &f,
+	}
+}()
+
 type AllowedMentionsParse string
 
 const (
@@ -211,33 +220,13 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 		opts.AllowedMentions = r.DefaultAllowedMentions
 	}
 
-	var files []RESTFormField
-	if len(opts.Attachments) != 0 {
-		files = make([]RESTFormField, 0, len(opts.Attachments))
-
-		var id uint
-		for i := range opts.Attachments {
-			attachment := &opts.Attachments[i]
-			if attachment.ID == 0 {
-				id++
-				attachment.ID = id
-			}
-
-			files = append(files, RESTFormField{
-				FieldName: fmt.Sprintf("files[%d]", id),
-				FileName:  "-",
-				Content:   attachment.Content,
-			})
-		}
-	}
-
 	var resp Message
 	err := r.RequestJSON(ctx, RESTRequest{
 		Method:  "POST",
 		Path:    fmt.Sprintf("/v1/channels/%d/messages", channelID),
 		Bucket:  fmt.Sprintf("channel:message:create:%d", channelID),
 		Payload: opts,
-		Form:    files,
+		Form:    createAttachmentOptsToForm(opts.Attachments),
 	}, &resp)
 	if err != nil {
 		return Message{}, err
@@ -245,6 +234,31 @@ func (r *REST) CreateMessage(ctx context.Context, channelID ID, opts CreateMessa
 
 	cacheMessage(&resp, r.Cache)
 	return resp, nil
+}
+
+func createAttachmentOptsToForm(attachments []CreateAttachmentOpts) []RESTFormField {
+	if len(attachments) == 0 {
+		return nil
+	}
+
+	result := make([]RESTFormField, 0, len(attachments))
+
+	var id uint
+	for i := range attachments {
+		attachment := &attachments[i]
+		if attachment.ID == 0 {
+			id++
+			attachment.ID = id
+		}
+
+		result = append(result, RESTFormField{
+			FieldName: fmt.Sprintf("files[%d]", id),
+			FileName:  "-",
+			Content:   attachment.Content,
+		})
+	}
+
+	return result
 }
 
 // EditMessageOpts specifies message fields to edit.

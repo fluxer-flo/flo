@@ -128,8 +128,20 @@ func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildC
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }
 
+func (g *Guild) GetRole(ctx context.Context, rest *REST, roleID ID) (Role, error) {
+	return rest.GetRole(ctx, g.ID, roleID)
+}
+
 func (g *Guild) CreateRole(ctx context.Context, rest *REST, opts CreateRoleOpts) (Role, error) {
 	return rest.CreateRole(ctx, g.ID, opts)
+}
+
+func (g *Guild) UpdateRole(ctx context.Context, rest *REST, roleID ID, opts UpdateRoleOpts) (Role, error) {
+	return rest.UpdateRole(ctx, g.ID, roleID, opts)
+}
+
+func (g *Guild) DeleteRole(ctx context.Context, rest *REST, roleID ID) error {
+	return rest.DeleteRole(ctx, g.ID, roleID)
 }
 
 func (g *Guild) GetMember(ctx context.Context, rest *REST, userID ID) (Member, error) {
@@ -194,6 +206,42 @@ func (g *Guild) RemoveBanWithReason(ctx context.Context, rest *REST, userID ID, 
 
 func (g *Guild) Leave(ctx context.Context, rest *REST) error {
 	return rest.LeaveGuild(ctx, g.ID)
+}
+
+func (g *Guild) GetEmoji(ctx context.Context, rest *REST, emojiID ID) (GuildEmoji, error) {
+	return rest.GetGuildEmoji(ctx, g.ID, emojiID)
+}
+
+func (g *Guild) CreateEmoji(ctx context.Context, rest *REST, opts CreateGuildEmojiOpts) (GuildEmoji, error) {
+	return rest.CreateGuildEmoji(ctx, g.ID, opts)
+}
+
+func (g *Guild) UpdateEmoji(ctx context.Context, rest *REST, emojiID ID, opts UpdateGuildEmojiOpts) (GuildEmoji, error) {
+	return rest.UpdateGuildEmoji(ctx, g.ID, emojiID, opts)
+}
+
+func (g *Guild) DeleteEmoji(ctx context.Context, rest *REST, emojiID ID) error {
+	return rest.DeleteGuildEmoji(ctx, g.ID, emojiID)
+}
+
+func (g *Guild) GetSticker(ctx context.Context, rest *REST, stickerID ID) (GuildSticker, error) {
+	return rest.GetGuildSticker(ctx, g.ID, stickerID)
+}
+
+func (g *Guild) CreateSticker(ctx context.Context, rest *REST, opts CreateGuildStickerOpts) (GuildSticker, error) {
+	return rest.CreateGuildSticker(ctx, g.ID, opts)
+}
+
+func (g *Guild) UpdateSticker(ctx context.Context, rest *REST, stickerID ID, opts UpdateGuildStickerOpts) (GuildSticker, error) {
+	return rest.UpdateGuildSticker(ctx, g.ID, stickerID, opts)
+}
+
+func (g *Guild) DeleteSticker(ctx context.Context, rest *REST, stickerID ID) error {
+	return rest.DeleteGuildSticker(ctx, g.ID, stickerID)
+}
+
+func (g *Guild) GetWebhooks(ctx context.Context, rest *REST) ([]Webhook, error) {
+	return rest.GetGuildWebhooks(ctx, g.ID)
 }
 
 func (g *Guild) updateProperties(guild *Guild) {
