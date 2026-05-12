@@ -220,7 +220,7 @@ func (g *Guild) UpdateEmoji(ctx context.Context, rest *REST, emojiID ID, opts Up
 	return rest.UpdateGuildEmoji(ctx, g.ID, emojiID, opts)
 }
 
-func (g *Guild) DeleteGuildEmoji(ctx context.Context, rest *REST, emojiID ID) error {
+func (g *Guild) DeleteEmoji(ctx context.Context, rest *REST, emojiID ID) error {
 	return rest.DeleteGuildEmoji(ctx, g.ID, emojiID)
 }
 
