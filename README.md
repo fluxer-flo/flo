@@ -1,6 +1,7 @@
 
 > [!IMPORTANT]  
 > The API coverage is currently quite low, and reliability is not guaranteed.
+> The library is also subject to making breaking changes since a release has not yet been made!
 
 # Flo
 
