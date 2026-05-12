@@ -462,7 +462,7 @@ func (r *REST) CreateGuildEmoji(ctx context.Context, guildID ID, opts CreateGuil
 }
 
 type UpdateGuildEmojiOpts struct {
-	Name string `json:"name"`
+	Name *string `json:"name,omitempty"`
 }
 
 func (r *REST) UpdateGuildEmoji(ctx context.Context, guildID ID, emojiID ID, opts UpdateGuildEmojiOpts) (GuildEmoji, error) {
