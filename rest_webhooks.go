@@ -219,7 +219,7 @@ func (r *REST) ExecWebhookWait(ctx context.Context, auth WebhookAuth, opts ExecW
 // A field being left as nil indicates to keep it the same.
 type EditWebhookMessageOpts struct {
 	Content         *string          `json:"content,omitempty"`
-	Embeds          []Embed          `json:"embeds,omitzero"`
+	Embeds          []EmbedOpts      `json:"embeds,omitzero"`
 	AllowedMentions *AllowedMentions `json:"allowed_mentions,omitempty"`
 	Flags           *MessageFlags    `json:"flags,omitempty"`
 }
