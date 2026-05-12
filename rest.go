@@ -54,8 +54,11 @@ type RESTRequest struct {
 	Path string
 	// RedactedPath is the path with any tokens redacted to be used in errors.
 	RedactedPath string
-	Query        string
-	Bucket       string
+	// Query is the query string passed after '?' in the URL, not including the '?'.
+	Query string
+	// Bucket is a string used to ratelimit requests together.
+	// A ratelimit being hit for one request for a given bucket string will pause all other requests with the same string until the ratelimit resets.
+	Bucket string
 
 	// Payload specifies a JSON body.
 	// If used in combination with Form, it will be added as payload_json.
@@ -64,6 +67,7 @@ type RESTRequest struct {
 	// If it is not empty, the content type will be set to multipart/form-data and these fields will be sent as the payload.
 	Form []RESTFormField
 
+	// AuditLogReason specifies the X-Audit-Log-Reason header, which for some requests displays an additional message in the audit log entry.
 	AuditLogReason string
 }
 
