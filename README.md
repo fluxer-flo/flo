@@ -50,28 +50,28 @@ func main() {
 
 	// REST is used to perform actions through Fluxer's REST HTTP API
 	rest := flo.REST{
-        // Auth can be omitted, for example if you're just using webhooks
-        // Note that this will cause ratelimits to be done based on IP instead
-        // Cache is also optional, omitting it will simply stop requests populating the cache
+		// Auth can be omitted, for example if you're just using webhooks
+		// Note that this will cause ratelimits to be done based on IP instead
+		// Cache is also optional, omitting it will simply stop requests populating the cache
 		Auth:  token, 
 		Cache: &cache,
-        // Recommended - disable all mentions unless AllowedMentions is explicitly specified for a message
-        DefaultAllowedMentions: &flo.AllowedMentionsNone,
+		// Recommended - disable all mentions unless AllowedMentions is explicitly specified for a message
+		DefaultAllowedMentions: &flo.AllowedMentionsNone,
 	}
 
 	// Gateway is used to receive events through a persistent websocket connection to Fluxer's gateway
 	gateway := flo.Gateway{
-        // Auth is required, but cache can be omitted to stop events from populating the cache (not recommended)
+		// Auth is required, but cache can be omitted to stop events from populating the cache (not recommended)
 		Auth:  token,
 		Cache: &cache,
 	}
-    gateway.SetPresence(flo.PresenceOpts{
-        Status: flo.UserStatusIdle,
-        CustomStatus: flo.CustomStatusOpts{
-            EmojiName: "💤",
-            Text: "chillin'",
-        },
-    })
+	gateway.SetPresence(flo.PresenceOpts{
+		Status: flo.UserStatusIdle,
+		CustomStatus: flo.CustomStatusOpts{
+			EmojiName: "💤",
+			Text: "chillin'",
+		},
+	})
 
 	gateway.ShardReady.OnceSync(func(r flo.ShardReadyEvent) {
 		fmt.Println("ready as " + r.User.Tag())

@@ -106,6 +106,7 @@ func (r *REST) CreateWebhook(ctx context.Context, channelID ID, opts CreateWebho
 		Method: "POST",
 		Path:   fmt.Sprintf("/v1/channels/%d/webhooks", channelID),
 		Bucket: fmt.Sprintf("webhook:create:%d", channelID),
+		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Webhook{}, err
