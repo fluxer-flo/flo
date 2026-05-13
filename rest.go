@@ -36,7 +36,10 @@ type REST struct {
 	DefaultAllowedMentions *AllowedMentions
 
 	bucketsMu sync.Mutex
-	// leaks a very small amount of memory B)
+	// Let It Leak! Let It Leak!
+	// Let It Leak! Oh, Let It Leak!
+	// Memory costs nothing!
+	// Let It Leak!
 	buckets map[string]chan struct{}
 }
 
