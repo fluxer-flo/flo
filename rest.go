@@ -27,7 +27,9 @@ type REST struct {
 	UserAgent string
 	// Client allows configuring the underlying HTTP client.
 	Client http.Client
-	// BaseURL specifies the base URL for requests. If not specified, the official Fluxer instance is used.
+	// BaseURL specifies the base URL for requests.
+	// If not specified, [DefaultAPIURL] is used.
+	// This should never contain the API version - it is specified per-request in order to allow progressive adoption of new API features, as well as to avoid silently breaking old code.
 	BaseURL *url.URL
 
 	// DefaultAllowedMentions specifies the default allowed mentions if nothing is specified when creating or editing a message.
@@ -38,7 +40,9 @@ type REST struct {
 	buckets map[string]chan struct{}
 }
 
-var defaultAPIURL = func() *url.URL {
+// DefaultAPIURL is the default value for [REST.BaseURL].
+// It points to the current base URL for API requests to the main Fluxer instance.
+var DefaultAPIURL = func() *url.URL {
 	result, err := url.Parse("https://api.fluxer.app/")
 	if err != nil {
 		panic(err)
@@ -99,7 +103,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 
 	httpURL := r.BaseURL
 	if httpURL == nil {
-		httpURL = defaultAPIURL
+		httpURL = DefaultAPIURL
 	}
 	if httpURL.Path == "" {
 		// NOTE: without this an invalid URL will be generated without a leading slash
@@ -117,7 +121,7 @@ func (r *REST) Request(ctx context.Context, req RESTRequest) (*http.Response, er
 
 	userAgent := r.UserAgent
 	if userAgent == "" {
-		userAgent = defaultUserAgent
+		userAgent = DefaultUserAgent
 	}
 	httpReq.Header.Set("User-Agent", userAgent)
 

@@ -3,7 +3,7 @@ package flo
 
 import "runtime/debug"
 
-var libVersion = func() string {
+func libVersion() string {
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
 		return ""
@@ -17,10 +17,11 @@ var libVersion = func() string {
 
 	return ""
 
-}()
+}
 
-var defaultUserAgent = func() string {
-	version := libVersion
+// DefaultUserAgent is the default user agent used for REST requests and the browser string when connecting to the gateway.
+var DefaultUserAgent = func() string {
+	version := libVersion()
 	if version == "" {
 		version = "unknown"
 	}

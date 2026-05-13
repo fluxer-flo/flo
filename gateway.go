@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,7 +30,10 @@ type Gateway struct {
 	// Cache specifies the caching target. If nil is specified, nothing is cached.
 	Cache *Cache
 	// ConnURL specifies the initial URL for establishing a connection.
-	ConnURL *url.URL
+	// If not specified, [DefaultGatewayURL] is used.
+	// If ?v=[num] is specified, it will be used as the gateway API version; otherwise [DefaultGatewayVersion] will be used.
+	// Be careful when changing the version number - it will likely break the library and cause disconnects.
+	ConnURL    *url.URL
 	// Dialer specifies options for connecting to the WebSocket server (from Gorilla WebSocket).
 	// If nil, websocket.DefaultDialer is used.
 	Dialer *websocket.Dialer
@@ -54,7 +58,9 @@ type Gateway struct {
 	runningShards atomic.Uint64
 }
 
-var defaultGatewayURL = func() *url.URL {
+// DefaultGatewayURL is the default value for [Gateway.ConnURL].
+// It points to the current gateway URL of the main Fluxer instance.
+var DefaultGatewayURL = func() *url.URL {
 	result, err := url.Parse("wss://gateway.fluxer.app")
 	if err != nil {
 		panic(err)
@@ -62,6 +68,9 @@ var defaultGatewayURL = func() *url.URL {
 
 	return result
 }()
+
+// DefaultGatewayVersion is the default gateway version if not specified in [Gateway.ConnURL].
+const DefaultGatewayVersion = 1
 
 func (g *Gateway) initShards() {
 	if g.shards != nil {
@@ -499,14 +508,14 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			dialer = websocket.DefaultDialer
 		}
 
-		url := *defaultGatewayURL
+		url := *DefaultGatewayURL
 		if s.gateway.ConnURL != nil {
 			url = *s.gateway.ConnURL
 		}
 
 		query := url.Query()
 		if !query.Has("v") {
-			query.Add("v", "1")
+			query.Add("v", strconv.Itoa(DefaultGatewayVersion))
 		}
 		url.RawQuery = query.Encode()
 
@@ -977,14 +986,14 @@ func (s *Shard) establishSession() error {
 		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
 
 		payload := gatewayIdentifyPayload{
-			Token: s.gateway.Auth,
-			Shard: [2]uint{s.id, s.gateway.TotalShards},
+			Token:    s.gateway.Auth,
+			Shard:    [2]uint{s.id, s.gateway.TotalShards},
 			Presence: presence,
 		}
 
 		payload.Properties.OS = runtime.GOOS
-		payload.Properties.Browser = defaultUserAgent
-		payload.Properties.Device = defaultUserAgent
+		payload.Properties.Browser = DefaultUserAgent
+		payload.Properties.Device = DefaultUserAgent
 
 		data, err := json.Marshal(payload)
 		if err != nil {
