@@ -265,7 +265,7 @@ func createAttachmentOptsToForm(attachments []CreateAttachmentOpts) []RESTFormFi
 // A field being left as nil indicates to keep it the same.
 type EditMessageOpts struct {
 	Content         *string              `json:"content,omitempty"`
-	Embeds          []Embed              `json:"embeds,omitzero"`
+	Embeds          []EmbedOpts          `json:"embeds,omitzero"`
 	AllowedMentions *AllowedMentions     `json:"allowed_mentions,omitempty"`
 	Attachments     []EditAttachmentOpts `json:"attachments,omitzero"`
 	Flags           *MessageFlags        `json:"flags,omitempty"`
