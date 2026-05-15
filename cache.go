@@ -366,6 +366,10 @@ func cacheMessageCommon(msg *Message, cache *Cache) {
 }
 
 func uncacheGatewayMessage(msg *MessageDeleteEvent, cache *Cache) *Message {
+	if cache == nil {
+		return nil
+	}
+
 	if msg.GuildID != nil {
 		if guild, ok := cache.Guilds.Get(*msg.GuildID); ok {
 			if channel, ok := guild.Channels.Get(msg.ChannelID); ok {
@@ -527,6 +531,10 @@ func cacheGuildMember(guild *Guild, member *Member, cache *Cache) {
 }
 
 func cacheMemberCommon(member *Member, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
 	cache.Users.Set(member.ID(), member.User)
 }
 
