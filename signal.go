@@ -108,6 +108,10 @@ func (s *Signal[T]) ClearListeners() {
 	s.callbacks = nil
 }
 
+func (s *Signal[T]) ListenerCount() int {
+	return len(s.callbacks)
+}
+
 func (s *Signal[T]) emit(val T) {
 	s.mu.Lock()
 	callbacks := make([]signalCallback[T], 0, len(s.callbacks))

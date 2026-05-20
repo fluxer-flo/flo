@@ -157,11 +157,11 @@ type MessageDeleteEvent struct {
 type MessageDeleteBulkEvent struct {
 	ChannelID ID
 	GuildID   *ID
-	Messages []BulkDeletedMessage
+	Messages  []BulkDeletedMessage
 }
 
 type BulkDeletedMessage struct {
-	ID ID 
+	ID ID
 	// Cached is the message that was removed from cache by this event, if any.
 	Cached *Message
 }

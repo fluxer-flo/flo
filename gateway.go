@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -49,6 +50,9 @@ type Gateway struct {
 	// TotalShards is the total amount of shards that the bot will indicate it will use.
 	// If left unset it will be determined from the highest shard ID + 1.
 	TotalShards uint
+
+	// Logger is the [slog.Logger] used by shards to log useful information.
+	Logger *slog.Logger
 
 	// See gateway_events.go.
 	gatewayEvents
@@ -481,15 +485,9 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				s.stateMu.Lock()
 				stop = !s.reqReconnect
 				if !stop {
-					slog.Debug(
-						"shard explicitly stopped before connect",
-						slog.Any("shard", s.id),
-					)
+					s.debug("shard explicitly stopped before connect")
 				} else {
-					slog.Debug(
-						"shard explicitly reconnected before connect",
-						slog.Any("shard", s.id),
-					)
+					s.debug("shard explicitly reconnected before connect")
 
 					ctx, cancel = context.WithCancel(context.Background())
 					s.reqDisconnect = cancel
@@ -519,7 +517,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 		}
 		url.RawQuery = query.Encode()
 
-		slog.Debug("attempting to establish websocket connection", slog.Any("shard", s.id))
+		s.debug("attempting to establish websocket connection")
 
 		conn, _, err := dialer.DialContext(ctx, url.String(), http.Header{})
 		if errors.Is(err, context.Canceled) {
@@ -535,27 +533,17 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				attempts = 1
 				sleepTime = s.sleepTime(attempts)
 
-				slog.Debug(
-					fmt.Sprintf("shard explicitly reconnected while establishing websocket connection; reconnecting in %s", sleepTime),
-					slog.Any("shard", s.id),
-				)
+				s.debug(fmt.Sprintf("shard explicitly reconnected while establishing websocket connection; reconnecting in %s", sleepTime))
 				continue
 			} else {
-				slog.Debug(
-					"shard explicitly stopped while establishing websocket connection",
-					slog.Any("shard", s.id),
-				)
+				s.debug("shard explicitly stopped while establishing websocket connection")
 				break
 			}
 		} else if err != nil {
 			attempts++
 			sleepTime = s.sleepTime(attempts)
 
-			slog.Warn(
-				fmt.Sprintf("failed to establish websocket connection; retrying in %s", sleepTime),
-				slog.Any("shard", s.id),
-				slog.Any("err", err),
-			)
+			s.warn(fmt.Sprintf("failed to establish websocket connection; retrying in %s", sleepTime), slog.Any("err", err))
 			continue
 		}
 
@@ -602,15 +590,13 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				attempts = 1
 				sleepTime = s.sleepTime(attempts)
 
-				slog.Debug(
+				s.debug(
 					fmt.Sprintf("shard explicitly disconnected; reconnecting in %s", sleepTime),
-					slog.Any("shard", s.id),
 					slog.Bool("reconnect", reconnect),
 				)
 			} else {
-				slog.Debug(
+				s.debug(
 					"shard explicitly disconnected",
-					slog.Any("shard", s.id),
 					slog.Bool("reconnect", reconnect),
 				)
 			}
@@ -629,21 +615,14 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				}
 
 				if reconnect {
-					slog.Warn(
-						fmt.Sprintf("websocket closed with %d %s; reconnecting in %s", closeErr.Code, closeErr.Text, sleepTime),
-						slog.Any("shard", s.id),
-					)
+					s.warn(fmt.Sprintf("websocket closed with %d %s; reconnecting in %s", closeErr.Code, closeErr.Text, sleepTime))
 				} else {
-					slog.Warn(
-						fmt.Sprintf("websocket closed with %d %s; not reconnecting", closeErr.Code, closeErr.Text),
-						slog.Any("shard", s.id),
-					)
+					s.warn(fmt.Sprintf("websocket closed with %d %s; not reconnecting", closeErr.Code, closeErr.Text))
 				}
 			} else {
 				reconnect = true
-				slog.Warn(
+				s.warn(
 					fmt.Sprintf("error with websocket connection; reconnecting in %s", sleepTime.String()),
-					slog.Any("shard", s.id),
 					slog.Any("err", disconnectErr),
 				)
 			}
@@ -661,7 +640,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 			case err = <-s.writeErr:
 				s.writeErr = nil
 			case <-time.After(time.Until(deadline)):
-				slog.Warn("writing pending packet took long to send a close message", slog.Any("shard", s.id))
+				s.warn("writing pending packet took long to send a close message")
 			}
 
 			if err == nil && s.writeErr != nil && s.readErr != nil {
@@ -671,9 +650,8 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 					closeCode = websocket.CloseAbnormalClosure
 				}
 
-				slog.Debug(
-					"sending close message",
-					slog.Any("shard", s.id),
+				s.debug(
+					"sending close message with code",
 					slog.Int("closeCode", closeCode),
 				)
 
@@ -683,9 +661,8 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 					deadline,
 				)
 				if err != nil {
-					slog.Warn(
+					s.warn(
 						"failed to send close message",
-						slog.Any("shard", s.id),
 						slog.Any("err", err),
 					)
 				} else {
@@ -695,16 +672,15 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 						var closed *websocket.CloseError
 						if !errors.As(err, &closed) || closed.Code != closeCode {
-							slog.Warn(
+							s.warn(
 								"got read error before close handshake completed",
-								slog.Any("shard", s.id),
 								slog.Any("err", err),
 							)
 						} else {
-							slog.Debug("close handshake complete", slog.Any("shard", s.id))
+							s.debug("close handshake complete")
 						}
 					case <-time.After(time.Until(deadline)):
-						slog.Warn("close handshake timed out", slog.Any("shard", s.id))
+						s.warn("close handshake timed out")
 					}
 				}
 			}
@@ -712,9 +688,8 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 
 		err = s.conn.Close()
 		if err != nil {
-			slog.Warn(
+			s.warn(
 				"error closing websocket connection",
-				slog.Any("shard", s.id),
 				slog.Any("err", err),
 			)
 		}
@@ -744,6 +719,24 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 	}
 }
 
+func (s *Shard) debug(msg string, attrs ...slog.Attr) {
+	s.log(slog.LevelDebug, msg, attrs...)
+}
+
+func (s *Shard) warn(msg string, attrs ...slog.Attr) {
+	s.log(slog.LevelWarn, msg, attrs...)
+}
+
+func (s *Shard) log(level slog.Level, msg string, attrs ...slog.Attr) {
+	logger := s.gateway.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	attrs = slices.Insert(attrs, 0, slog.Uint64("shard", uint64(s.id)))
+	logger.LogAttrs(context.Background(), level, msg, attrs...)
+}
+
 // queuePacket queues a packet.
 // This should only be used from the shard control goroutine.
 // To prevent deadlocking when the outbound buffer is full, an error is returned if a write error was signaled before the packet was received on the write goroutine.
@@ -766,7 +759,7 @@ func (s *Shard) readLoop() {
 		}
 
 		if msgType != websocket.TextMessage {
-			slog.Warn("don't know how to handle binary message")
+			s.warn("don't know how to handle binary message")
 			continue
 		}
 
@@ -878,8 +871,9 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 	s.gateway.ShardPacketReceived.emit(event)
 
 	if packet.Seq != nil {
-		if *packet.Seq != s.lastSeq+1 {
-			slog.Warn(fmt.Sprintf("sequence number does not follow from %d: %d", s.lastSeq, *packet.Seq))
+		if *packet.Seq != s.lastSeq+1 &&
+			(packet.Event == nil || *packet.Event != "RESUMED") {
+			s.warn(fmt.Sprintf("sequence number does not follow from %d: %d", s.lastSeq, *packet.Seq))
 		}
 
 		s.lastSeq = *packet.Seq
@@ -948,7 +942,7 @@ func (s *Shard) handlePacket(packet GatewayPacket) error {
 			return fmt.Errorf("error handling Dispatch packet: %w", err)
 		}
 	default:
-		slog.Warn("don't know how to handle " + packet.Opcode.String())
+		s.warn("don't know how to handle " + packet.Opcode.String())
 	}
 
 	return nil
@@ -983,7 +977,7 @@ func (s *Shard) establishSession() error {
 	s.stateMu.Unlock()
 
 	if s.sessionID == "" {
-		slog.Debug("no existing session; sending identify packet", slog.Any("shard", s.id))
+		s.debug("no existing session; sending identify packet")
 
 		payload := gatewayIdentifyPayload{
 			Token:    s.gateway.Auth,
@@ -1008,7 +1002,7 @@ func (s *Shard) establishSession() error {
 			return err
 		}
 	} else {
-		slog.Debug("have existing session; sending resume packet", slog.Any("shard", s.id), slog.Any("session", s.sessionID))
+		s.debug("have existing session; sending resume packet", slog.Any("session", s.sessionID))
 
 		payload := gatewayResumePayload{
 			Token:     s.gateway.Auth,
@@ -1131,6 +1125,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			}
 		}
 	case "RESUMED":
+		s.debug("shard resumed packet received")
+
 		s.Resumed.emit(ShardResumedEvent{s})
 		s.gateway.ShardResumed.emit(ShardResumedEvent{s})
 	case "CHANNEL_CREATE":
@@ -1533,7 +1529,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		cacheCurrentUser(&event.UserPrivate, cache)
 		s.gateway.UserUpdate.emit(event)
 	default:
-		slog.Warn("don't know how to handle event " + *packet.Event)
+		s.warn("don't know how to handle event " + *packet.Event)
 	}
 
 	return nil
