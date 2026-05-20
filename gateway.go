@@ -1061,6 +1061,8 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 	switch *packet.Event {
 	case "READY":
+		s.debug("shard ready")
+
 		var raw struct {
 			SessionID string      `json:"session_id"`
 			User      UserPrivate `json:"user"`
@@ -1125,7 +1127,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			}
 		}
 	case "RESUMED":
-		s.debug("shard resumed packet received")
+		s.debug("shard resumed")
 
 		s.Resumed.emit(ShardResumedEvent{s})
 		s.gateway.ShardResumed.emit(ShardResumedEvent{s})
