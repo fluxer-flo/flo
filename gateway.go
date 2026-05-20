@@ -33,7 +33,7 @@ type Gateway struct {
 	// If not specified, [DefaultGatewayURL] is used.
 	// If ?v=[num] is specified, it will be used as the gateway API version; otherwise [DefaultGatewayVersion] will be used.
 	// Be careful when changing the version number - it will likely break the library and cause disconnects.
-	ConnURL    *url.URL
+	ConnURL *url.URL
 	// Dialer specifies options for connecting to the WebSocket server (from Gorilla WebSocket).
 	// If nil, websocket.DefaultDialer is used.
 	Dialer *websocket.Dialer
@@ -664,7 +664,7 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 				slog.Warn("writing pending packet took long to send a close message", slog.Any("shard", s.id))
 			}
 
-			if err == nil && s.writeErr == nil && s.readErr != nil {
+			if err == nil && s.writeErr != nil && s.readErr != nil {
 				// we haven't had a read or write error, so send a polite goodbye message
 				closeCode := websocket.CloseNormalClosure
 				if disconnectErr != nil {
@@ -688,24 +688,24 @@ func (s *Shard) run(ctx context.Context, cancel context.CancelFunc) {
 						slog.Any("shard", s.id),
 						slog.Any("err", err),
 					)
-				}
+				} else {
+					select {
+					case err := <-s.readErr:
+						s.readErr = nil
 
-				select {
-				case err := <-s.readErr:
-					s.readErr = nil
-
-					var closed *websocket.CloseError
-					if !errors.As(err, &closed) || closed.Code != closeCode {
-						slog.Warn(
-							"got read error before close handshake completed",
-							slog.Any("shard", s.id),
-							slog.Any("err", err),
-						)
+						var closed *websocket.CloseError
+						if !errors.As(err, &closed) || closed.Code != closeCode {
+							slog.Warn(
+								"got read error before close handshake completed",
+								slog.Any("shard", s.id),
+								slog.Any("err", err),
+							)
+						} else {
+							slog.Debug("close handshake complete", slog.Any("shard", s.id))
+						}
+					case <-time.After(time.Until(deadline)):
+						slog.Warn("close handshake timed out", slog.Any("shard", s.id))
 					}
-
-					slog.Debug("close handshake complete", slog.Any("shard", s.id))
-				case <-time.After(time.Until(deadline)):
-					slog.Warn("close handshake timed out", slog.Any("shard", s.id))
 				}
 			}
 		}
