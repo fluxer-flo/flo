@@ -979,9 +979,13 @@ func (s *Shard) establishSession() error {
 	if s.sessionID == "" {
 		s.debug("no existing session; sending identify packet")
 
+		totalShards := s.gateway.TotalShards
+		if totalShards == 0 {
+			totalShards = s.gateway.LastShard + 1
+		}
 		payload := gatewayIdentifyPayload{
 			Token:    s.gateway.Auth,
-			Shard:    [2]uint{s.id, s.gateway.TotalShards},
+			Shard:    [2]uint{s.id, totalShards},
 			Presence: presence,
 		}
 
