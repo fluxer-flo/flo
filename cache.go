@@ -467,8 +467,10 @@ func cacheGatewayGuild(guild *gatewayGuild, cache *Cache) (Guild, bool) {
 		}
 	}
 
-	for _, sticker := range guild.Stickers {
-		result.Stickers.Set(sticker.ID, sticker)
+	if result.Stickers != nil {
+		for _, sticker := range guild.Stickers {
+			result.Stickers.Set(sticker.ID, sticker)
+		}
 	}
 
 	var wasUnavailable bool
