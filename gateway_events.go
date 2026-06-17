@@ -53,6 +53,10 @@ type gatewayEvents struct {
 	GuildBanAdd Signal[GuildBanAddEvent]
 	// GuildBanRemove is emitted when a user is unbanned from a guild.
 	GuildBanRemove Signal[GuildBanRemoveEvent]
+	// InviteCreate is emitted when an invite is created, not necessarily in a guild.
+	InviteCreate Signal[InviteCreateEvent]
+	// InviteDelete is emitted when an invite is removed, not necessarily in a guild.
+	InviteDelete Signal[InviteDeleteEvent]
 	// UserUpdate is emitted when the current user changes.
 	UserUpdate Signal[UserUpdateEvent]
 
@@ -351,6 +355,18 @@ func (e *GuildBanRemoveEvent) Guild(cache *Cache) (Guild, bool) {
 // User returns the user that was unbanned if it is cached.
 func (e *GuildBanRemoveEvent) User(cache *Cache) (User, bool) {
 	return cache.Users.Get(e.UserID)
+}
+
+type InviteCreateEvent struct {
+	Shard *Shard `json:"-"`
+	Invite
+}
+
+type InviteDeleteEvent struct {
+	Shard     *Shard  `json:"-"`
+	Code      string  `json:"code"`
+	ChannelID *string  `json:"channel_id"`
+	GuildID   *string `json:"guild_id"`
 }
 
 type UserUpdateEvent struct {

@@ -1525,6 +1525,23 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 			UserID:  raw.User.ID,
 		}
 		s.gateway.GuildBanRemove.emit(event)
+	case "INVITE_CREATE":
+		event := InviteCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal INVITE_CREATE data: %w", err)
+		}
+
+		cacheInvite(&event.Invite, cache)
+		s.gateway.InviteCreate.emit(event)
+	case "INVITE_DELETE":
+		event := InviteDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal INVITE_DELETE data: %w", err)
+		}
+
+		s.gateway.InviteDelete.emit(event)
 	case "USER_UPDATE":
 		event := UserUpdateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
