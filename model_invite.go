@@ -137,6 +137,9 @@ type GroupDMInvite struct {
 	TempAccess  bool          `json:"temporary"`
 	Channel     InviteChannel `json:"channel"`
 	MemberCount int           `json:"member_count"`
+	Uses        *int          `json:"uses"`
+	MaxUses     *int          `json:"max_uses"`
+	CreatedAt   *time.Time    `json:"created_at"`
 }
 
 func (i GroupDMInvite) ToInvite() Invite {

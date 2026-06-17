@@ -574,3 +574,29 @@ func cacheWebhook(webhook *Webhook, cache *Cache) {
 		cache.Users.Set(webhook.User.ID, *webhook.User)
 	}
 }
+
+func cacheInvite(invite *Invite, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	if invite.Inviter != nil {
+		cache.Users.Set(invite.Inviter.ID, *invite.Inviter)
+	}
+
+	if invite.Channel != nil {
+		for _, user := range invite.Channel.Recipients {
+			cache.Users.Set(user.ID, user)
+		}
+	}
+}
+
+func cacheGuildInvite(invite  *GuildInvite, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	if invite.Inviter != nil {
+		cache.Users.Set(invite.Inviter.ID, *invite.Inviter)
+	}
+}

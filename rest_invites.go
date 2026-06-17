@@ -17,6 +17,7 @@ func (r *REST) GetInvite(ctx context.Context, code string) (Invite, error) {
 		return Invite{}, err
 	}
 
+	cacheInvite(&resp, r.Cache)
 	return resp, nil
 }
 
@@ -29,6 +30,10 @@ func (r *REST) GetChannelInvites(ctx context.Context, guildID ID) ([]Invite, err
 	}, &resp)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, invite := range resp {
+		cacheInvite(&invite, r.Cache)
 	}
 
 	return resp, nil
@@ -45,12 +50,16 @@ func (r *REST) GetGuildInvites(ctx context.Context, guildID ID) ([]GuildInvite, 
 		return nil, err
 	}
 
+	for _, invite := range resp {
+		cacheGuildInvite(&invite, r.Cache)
+	}
+
 	return resp, nil
 }
 
 type CreateChannelInviteOpts struct {
 	// MaxUses is the maximum number of times the invite can be used (0 = unlimited).
-	MaxUses    int `json:"max_uses"`
+	MaxUses int `json:"max_uses"`
 	// MaxAgeSecs is the duration in seconds that the invite will last for.
 	MaxAgeSecs int `json:"max_age"`
 	// Unique specifies whether to create a new invite or reuse an existing one.
@@ -62,15 +71,16 @@ type CreateChannelInviteOpts struct {
 func (r *REST) CreateChannelInvite(ctx context.Context, channelID ID, opts CreateChannelInviteOpts) (Invite, error) {
 	var resp Invite
 	err := r.RequestJSON(ctx, RESTRequest{
-		Method: "POST",
-		Path:   fmt.Sprintf("/v1/channels/%d/invite", channelID),
-		Bucket: fmt.Sprintf("invite:create:%d", channelID),
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/invite", channelID),
+		Bucket:  fmt.Sprintf("invite:create:%d", channelID),
 		Payload: opts,
 	}, &resp)
 	if err != nil {
 		return Invite{}, err
 	}
 
+	cacheInvite(&resp, r.Cache)
 	return resp, nil
 }
 
