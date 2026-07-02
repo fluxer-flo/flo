@@ -124,6 +124,16 @@ func (g *Guild) ResolvePermsInChannel(member Member, channel Channel) (Perms, bo
 	return result, true
 }
 
+func (g *Guild) Update(ctx context.Context, rest *REST, opts UpdateGuildOpts) error {
+	guild, err := rest.UpdateGuild(ctx, g.ID, opts)
+	if err != nil {
+		return err
+	}
+
+	*g = guild
+	return nil
+}
+
 func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildChannelOpts) (Channel, error) {
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }

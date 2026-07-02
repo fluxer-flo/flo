@@ -23,6 +23,46 @@ func (r *REST) GetGuild(ctx context.Context, guildID ID) (Guild, error) {
 	return result, nil
 }
 
+type UpdateGuildOpts struct {
+	Name                  *string                     `json:"name,omitempty"`
+	Icon                  *string                     `json:"icon,omitempty"`
+	SystemChannelID       *ID                         `json:"system_channel_id,omitempty"`
+	SystemChannelFlags    *GuildSystemChannelFlags    `json:"system_channel_flags,omitempty"`
+	AFKTimeoutSecs        *int                        `json:"afk_timeout,omitempty"`
+	DefaultMessageNotifs  UserNotifSettings           `json:"default_message_notifications,omitempty"`
+	VerifLevel            GuildVerifLevel             `json:"guild_verification_level,omitempty"`
+	MFALevel              *GuildMFALevel              `json:"mfa_level,omitempty"`
+	NSFWLevel             *GuildNSFWLevel             `json:"nsfw_level,omitempty"`
+	ExplicitContentFilter *GuildExplicitContentFilter `json:"explicit_content_filter,omitempty"`
+	// Banner is the banner image in base64.
+	Banner *string `json:"banner,omitempty"`
+	// Splash is the splash image in base64.
+	Splash *string `json:"splash,omitempty"`
+	// EmbedSplash is the embedded invite splash image in base64.
+	EmbedSplash           *string                   `json:"embed_splash,omitempty"`
+	SplashCardAlignment   *GuildSplashCardAlignment `json:"splash_card_alignment,omitempty"`
+	Features              []GuildFeature            `json:"features,omitzero"`
+	AddFeatures           []GuildFeature            `json:"add_features,omitzero"`
+	RemoveFeatures        []GuildFeature            `json:"remove_features,omitzero"`
+	MessageeHistoryCutoff *time.Time                `json:"message_history_cutoff,omitempty"`
+}
+
+func (r *REST) UpdateGuild(ctx context.Context, guildID ID, opts UpdateGuildOpts) (Guild, error) {
+	var resp Guild
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "PATCH",
+		Path:    fmt.Sprintf("/v1/guilds/%d", guildID),
+		Bucket:  fmt.Sprintf("guild:update:%d", guildID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Guild{}, err
+	}
+
+	cacheGuild(&resp, r.Cache)
+	return resp, nil
+}
+
 type CreateGuildChannelOpts struct {
 	Type     ChannelType `json:"type"`
 	Name     string      `json:"name,omitempty"`
