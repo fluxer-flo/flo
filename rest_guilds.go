@@ -29,8 +29,8 @@ type UpdateGuildOpts struct {
 	SystemChannelID       *ID                         `json:"system_channel_id,omitempty"`
 	SystemChannelFlags    *GuildSystemChannelFlags    `json:"system_channel_flags,omitempty"`
 	AFKTimeoutSecs        *int                        `json:"afk_timeout,omitempty"`
-	DefaultMessageNotifs  UserNotifSettings           `json:"default_message_notifications,omitempty"`
-	VerifLevel            GuildVerifLevel             `json:"guild_verification_level,omitempty"`
+	DefaultMessageNotifs  *UserNotifSettings          `json:"default_message_notifications,omitempty"`
+	VerifLevel            *GuildVerifLevel            `json:"guild_verification_level,omitempty"`
 	MFALevel              *GuildMFALevel              `json:"mfa_level,omitempty"`
 	NSFWLevel             *GuildNSFWLevel             `json:"nsfw_level,omitempty"`
 	ExplicitContentFilter *GuildExplicitContentFilter `json:"explicit_content_filter,omitempty"`
