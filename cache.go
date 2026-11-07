@@ -10,16 +10,21 @@ type Cache struct {
 	// MakeDMChannel is used to create new DM channel entries if it is not nil.
 	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
 	MakeDMChannel func() Channel
-	// DMChannels is populated by channels of type [ChannelTypeGroupDM].
+	// GoupDMChannels is populated by channels of type [ChannelTypeGroupDM].
 	GroupDMChannels Collection[Channel]
-	// MakeGroupDM is used to create new group DM channel entries if it is not nil.
+	// MakeGroupDMChannel is used to create new group DM channel entries if it is not nil.
 	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
 	MakeGroupDMChannel func() Channel
 	// ChannelGuilds is populated with a mapping from guild channel ID -> guild ID.
 	ChannelGuilds Collection[ID]
-	// MakePrivateChannel is used to create new guild channel entries if it is not nil.
+	// ThreadGuilds is populated with a mapping from thread channel ID -> guild ID.
+	ThreadGuilds Collection[ID]
+	// MakeGuildChannel is used to create new guild channel entries if it is not nil.
 	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
 	MakeGuildChannel func() Channel
+	// MakeGuildThread is used to create new guild thread entries if it is not nil.
+	// This function should simply return a channel with the [Collection]s set for whatever limits are desired.
+	MakeGuildThread func() Channel
 	// Guilds by default is populated by guilds which are available on the gateway.
 	// If requesting a Guild over the REST API, you will manually need to add it if you wish to be able to retrieve it later.
 	Guilds Collection[Guild]
@@ -70,6 +75,7 @@ func NewCacheDefault() Cache {
 		UnavailableGuilds: NewCollectionUnlimited[struct{}](),
 		MakeGuild: func() Guild {
 			channels := NewCollectionUnlimited[Channel]()
+			threads := NewCollectionUnlimited[Channel]()
 			roles := NewCollectionUnlimited[Role]()
 			members := NewCollectionUnlimited[Member]()
 			emojis := NewCollectionUnlimited[GuildEmoji]()
@@ -77,6 +83,7 @@ func NewCacheDefault() Cache {
 
 			return Guild{
 				Channels: &channels,
+				Threads:  &threads,
 				Roles:    &roles,
 				Members:  &members,
 				Emojis:   &emojis,
@@ -100,6 +107,13 @@ func (c *Cache) Channel(channelID ID) (Channel, bool) {
 		}
 	}
 
+	if guildID, ok := c.ThreadGuilds.Get(channelID); ok {
+		guild, ok := c.Guilds.Get(guildID)
+		if ok {
+			return guild.Threads.Get(channelID)
+		}
+	}
+
 	if channel, ok := c.DMChannels.Get(channelID); ok {
 		return channel, true
 	}
@@ -117,6 +131,13 @@ func (c *Cache) UpdateChannel(channelID ID, update func(channel *Channel)) bool 
 		guild, ok := c.Guilds.Get(guildID)
 		if ok && guild.Channels != nil {
 			return guild.Channels.Update(channelID, update)
+		}
+	}
+
+	if guildID, ok := c.ThreadGuilds.Get(channelID); ok {
+		guild, ok := c.Guilds.Get(guildID)
+		if ok && guild.Threads != nil {
+			return guild.Threads.Update(channelID, update)
 		}
 	}
 
@@ -179,6 +200,15 @@ func initGuildChannelCollections(channel *Channel, cache *Cache) {
 	}
 
 	channel.Messages = template.Messages
+}
+
+func initGuildThreadCollections(thread *Channel, cache *Cache) {
+	var template Channel
+	if cache.MakeGuildThread != nil {
+		template = cache.MakeGuildThread()
+	}
+
+	thread.Messages = template.Messages
 }
 
 func initDMChannelCollections(channel *Channel, cache *Cache) {
@@ -268,6 +298,48 @@ func uncacheChannel(channel *Channel, cache *Cache) {
 	} else if channel.Type == ChannelTypeGroupDM {
 		cache.GroupDMChannels.Delete(channel.ID)
 	}
+}
+
+func cacheThread(thread *Channel, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	guild, ok := cache.Guilds.Get(*thread.GuildID)
+	if !ok {
+		return
+	}
+	cacheGuildThread(&guild, thread, cache)
+}
+
+func cacheGuildThread(guild *Guild, thread *Channel, cache *Cache) {
+	if cache == nil {
+		return
+	}
+
+	if guild.Threads == nil {
+		return
+	}
+
+	initGuildThreadCollections(thread, cache)
+	guild.Threads.Upsert(thread.ID, *thread, func(cached *Channel) {
+		cached.updateProperties(thread)
+	})
+}
+
+func uncacheThread(guildID ID, id ID, cache *Cache) *Channel {
+	if cache == nil {
+		return nil
+	}
+
+	cache.ThreadGuilds.Delete(id)
+
+	if guild, ok := cache.Guilds.Get(guildID); ok {
+		cached, _ := guild.Threads.Delete(id)
+		return cached
+	}
+
+	return nil
 }
 
 func cacheGatewayMessage(msg *MessageCreateEvent, isNew bool, cache *Cache) {
@@ -408,6 +480,9 @@ func uncacheGuild(guildID ID, cache *Cache) *Guild {
 		for channelID := range removed.Channels.IDs() {
 			cache.ChannelGuilds.Delete(channelID)
 		}
+		for threadID := range removed.Threads.IDs() {
+			cache.ThreadGuilds.Delete(threadID)
+		}
 	}
 
 	return removed
@@ -417,6 +492,9 @@ func initGuildCollections(guild *Guild, cache *Cache) {
 	if cache == nil {
 		channels := NewCollectionUnlimited[Channel]()
 		guild.Channels = &channels
+
+		threads := NewCollectionUnlimited[Channel]()
+		guild.Threads = &threads
 
 		members := NewCollectionUnlimited[Member]()
 		guild.Members = &members
@@ -436,6 +514,7 @@ func initGuildCollections(guild *Guild, cache *Cache) {
 		}
 
 		guild.Channels = template.Channels
+		guild.Threads = template.Threads
 		guild.Members = template.Members
 		guild.Roles = template.Roles
 		guild.Emojis = template.Emojis
@@ -449,6 +528,10 @@ func cacheGatewayGuild(guild *gatewayGuild, cache *Cache) (Guild, bool) {
 
 	for _, channel := range guild.Channels {
 		cacheGuildChannel(&result, &channel, cache)
+	}
+
+	for _, thread := range guild.Threads {
+		cacheGuildThread(&result, &thread, cache)
 	}
 
 	if result.Roles != nil {
@@ -593,7 +676,7 @@ func cacheInvite(invite *Invite, cache *Cache) {
 	}
 }
 
-func cacheGuildInvite(invite  *GuildInvite, cache *Cache) {
+func cacheGuildInvite(invite *GuildInvite, cache *Cache) {
 	if cache == nil {
 		return
 	}

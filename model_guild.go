@@ -42,6 +42,9 @@ type Guild struct {
 	// Channels is the known channels of the guild.
 	// If the guild is cached, they will be automatically updated.
 	Channels *Collection[Channel] `json:"-"`
+	// Threads is the known threads of the guild.
+	// If the guild is cached, they will be automatically updated.
+	Threads *Collection[Channel] `json:"-"`
 	// Roles is the known roles of the guild.
 	// If the guild is cached, they will be automatically updated.
 	Roles *Collection[Role] `json:"-"`

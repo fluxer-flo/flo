@@ -11,6 +11,12 @@ type gatewayEvents struct {
 	ChannelUpdateBulk Signal[ChannelUpdateBulkEvent]
 	// ChannelDelete is emitted when a channel is deleted.
 	ChannelDelete Signal[ChannelDeleteEvent]
+	// ThreadCreate is emitted when a thread is created.
+	ThreadCreate Signal[ThreadCreateEvent]
+	// ThreadUpdate is emitted when a thread is updated.
+	ThreadUpdate Signal[ThreadUpdateEvent]
+	// ThreadDelete is emitted when a thread is deleted.
+	ThreadDelete Signal[ThreadDeleteEvent]
 	// MessageCreate is emitted when a user sends a message.
 	MessageCreate Signal[MessageCreateEvent]
 	// MessageUpdate is emitted when a message is updated (not necessarily a user edit).
@@ -97,6 +103,27 @@ type ChannelUpdateBulkEvent struct {
 type ChannelDeleteEvent struct {
 	Shard *Shard `json:"-"`
 	Channel
+}
+
+type ThreadCreateEvent struct {
+	Shard        *Shard  `json:"-"`
+	NewlyCreated bool    `json:"newly_created"`
+	Member       *Member `json:"member"`
+	Channel
+}
+
+type ThreadUpdateEvent struct {
+	Shard *Shard `json:"-"`
+	Channel
+}
+
+type ThreadDeleteEvent struct {
+	Shard    *Shard      `json:"-"`
+	ID       ID          `json:"id"`
+	GuildID  ID          `json:"guild_id"`
+	ParentID ID          `json:"parent_id"`
+	Type     ChannelType `json:"type"`
+	Cached   *Channel    `json:"-"`
 }
 
 // MessageCreateEvent represents a received message.
@@ -365,7 +392,7 @@ type InviteCreateEvent struct {
 type InviteDeleteEvent struct {
 	Shard     *Shard  `json:"-"`
 	Code      string  `json:"code"`
-	ChannelID *string  `json:"channel_id"`
+	ChannelID *string `json:"channel_id"`
 	GuildID   *string `json:"guild_id"`
 }
 

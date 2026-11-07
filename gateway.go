@@ -1050,6 +1050,7 @@ func (s *Shard) establishSession() error {
 type gatewayGuild struct {
 	Properties Guild          `json:"properties"`
 	Channels   []Channel      `json:"channels"`
+	Threads    []Channel      `json:"threads"`
 	Roles      []Role         `json:"roles"`
 	Members    []Member       `json:"members"`
 	Emojis     []GuildEmoji   `json:"emojis"`
@@ -1179,6 +1180,39 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 
 		uncacheChannel(&event.Channel, cache)
 		s.gateway.ChannelDelete.emit(event)
+	case "THREAD_CREATE":
+		event := ThreadCreateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal THREAD_CREATE data: %w", err)
+		}
+
+		cacheThread(&event.Channel, cache)
+		s.gateway.ThreadCreate.emit(event)
+	case "THREAD_UPDATE":
+		event := ThreadUpdateEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal THREAD_UPDATE data: %w", err)
+		}
+
+		cacheThread(&event.Channel, cache)
+		s.gateway.ThreadUpdate.emit(event)
+	case "THREAD_DELETE":
+		event := ThreadDeleteEvent{Shard: s}
+		err := json.Unmarshal(packet.Data, &event)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal THREAD_DELETE data: %w", err)
+		}
+
+		if cache != nil {
+			if guild, ok := cache.Guilds.Get(event.GuildID); ok {
+				event.Cached, _ = guild.Channels.Delete(event.ID)
+			}
+		}
+
+		event.Cached = uncacheThread(event.GuildID, event.ID, cache)
+		s.gateway.ThreadDelete.emit(event)
 	case "MESSAGE_CREATE":
 		event := MessageCreateEvent{Shard: s}
 		err := json.Unmarshal(packet.Data, &event)
@@ -1407,8 +1441,7 @@ func (s *Shard) handleDispatch(packet GatewayPacket) error {
 		if cache != nil {
 			guild, ok := cache.Guilds.Get(event.GuildID)
 			if ok && guild.Roles != nil {
-				role, _ := guild.Roles.Delete(event.RoleID)
-				event.Cached = role
+				event.Cached, _ = guild.Roles.Delete(event.RoleID)
 			}
 		}
 
