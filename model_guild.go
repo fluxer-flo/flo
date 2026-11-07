@@ -429,43 +429,47 @@ type Perms struct {
 }
 
 var (
-	PermCreateInstantInvite = NewPermsBit(0)
-	PermKickMembers         = NewPermsBit(1)
-	PermBanMembers          = NewPermsBit(2)
-	PermAdministrator       = NewPermsBit(3)
-	PermManageChannels      = NewPermsBit(4)
-	PermManageGuild         = NewPermsBit(5)
-	PermAddReactions        = NewPermsBit(6)
-	PermViewAuditLog        = NewPermsBit(7)
-	PermPrioritySpeaker     = NewPermsBit(8)
-	PermStream              = NewPermsBit(9)
-	PermViewChannel         = NewPermsBit(10)
-	PermSendMessages        = NewPermsBit(11)
-	PermSendTTSMessages     = NewPermsBit(12)
-	PermManageMessages      = NewPermsBit(13)
-	PermEmbedLinks          = NewPermsBit(14)
-	PermAttachFiles         = NewPermsBit(15)
-	PermReadMessageHistory  = NewPermsBit(16)
-	PermMentionEveryone     = NewPermsBit(17)
-	PermUseExternalEmojis   = NewPermsBit(18)
-	PermConnect             = NewPermsBit(20)
-	PermSpeak               = NewPermsBit(21)
-	PermMuteMembers         = NewPermsBit(22)
-	PermDeafenMembers       = NewPermsBit(23)
-	PermMoveMembers         = NewPermsBit(24)
-	PermUseVAD              = NewPermsBit(25)
-	PermChangeNickname      = NewPermsBit(26)
-	PermManageNicknames     = NewPermsBit(27)
-	PermManageRoles         = NewPermsBit(28)
-	PermManageWebhooks      = NewPermsBit(29)
-	PermManageExpressions   = NewPermsBit(30)
-	PermUseExternalStickers = NewPermsBit(37)
-	PermModerateMembers     = NewPermsBit(40)
-	PermCreateExpressions   = NewPermsBit(43)
-	PermPinMembers          = NewPermsBit(51)
-	PermBypassSlowmode      = NewPermsBit(52)
-	PermUpdateRTCRegion     = NewPermsBit(53)
-	PermsAll                = NewPerms(
+	PermCreateInstantInvite  = NewPermsBit(0)
+	PermKickMembers          = NewPermsBit(1)
+	PermBanMembers           = NewPermsBit(2)
+	PermAdministrator        = NewPermsBit(3)
+	PermManageChannels       = NewPermsBit(4)
+	PermManageGuild          = NewPermsBit(5)
+	PermAddReactions         = NewPermsBit(6)
+	PermViewAuditLog         = NewPermsBit(7)
+	PermPrioritySpeaker      = NewPermsBit(8)
+	PermStream               = NewPermsBit(9)
+	PermViewChannel          = NewPermsBit(10)
+	PermSendMessages         = NewPermsBit(11)
+	PermSendTTSMessages      = NewPermsBit(12)
+	PermManageMessages       = NewPermsBit(13)
+	PermEmbedLinks           = NewPermsBit(14)
+	PermAttachFiles          = NewPermsBit(15)
+	PermReadMessageHistory   = NewPermsBit(16)
+	PermMentionEveryone      = NewPermsBit(17)
+	PermUseExternalEmojis    = NewPermsBit(18)
+	PermConnect              = NewPermsBit(20)
+	PermSpeak                = NewPermsBit(21)
+	PermMuteMembers          = NewPermsBit(22)
+	PermDeafenMembers        = NewPermsBit(23)
+	PermMoveMembers          = NewPermsBit(24)
+	PermUseVAD               = NewPermsBit(25)
+	PermChangeNickname       = NewPermsBit(26)
+	PermManageNicknames      = NewPermsBit(27)
+	PermManageRoles          = NewPermsBit(28)
+	PermManageWebhooks       = NewPermsBit(29)
+	PermManageExpressions    = NewPermsBit(30)
+	PermManageThreads        = NewPermsBit(34)
+	PermCreatePublicThreads  = NewPermsBit(35)
+	PermCreatePrivateThreads = NewPermsBit(36)
+	PermUseExternalStickers  = NewPermsBit(37)
+	PermModerateMembers      = NewPermsBit(40)
+	PermCreateExpressions    = NewPermsBit(43)
+	PermPinMessages          = NewPermsBit(51)
+	PermBypassSlowmode       = NewPermsBit(52)
+	PermUpdateRTCRegion      = NewPermsBit(53)
+	PermViewChannelMembers   = NewPermsBit(54)
+	PermsAll                 = NewPerms(
 		PermCreateInstantInvite,
 		PermKickMembers,
 		PermBanMembers,
@@ -496,12 +500,16 @@ var (
 		PermManageRoles,
 		PermManageWebhooks,
 		PermManageExpressions,
+		PermManageThreads,
+		PermCreatePublicThreads,
+		PermCreatePrivateThreads,
 		PermUseExternalStickers,
 		PermModerateMembers,
 		PermCreateExpressions,
-		PermPinMembers,
+		PermPinMessages,
 		PermBypassSlowmode,
 		PermUpdateRTCRegion,
+		PermViewChannelMembers,
 	)
 )
 
