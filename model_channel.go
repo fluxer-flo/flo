@@ -52,6 +52,8 @@ type Channel struct {
 	RateLimitSecs int `json:"rate_limit_per_user"`
 	// Nicks contains custom nicknames for users inside the channel if the type is [ChannelTypeGroupDM].
 	Nicks map[ID]string `json:"nicks"`
+	// Flags is the set of flags on the channel.
+	Flags ChannelFlags `json:"flags"`
 
 	Messages *Collection[Message]
 }
@@ -177,13 +179,19 @@ func (c *Channel) updateProperties(channel *Channel) {
 type ChannelType uint
 
 const (
-	ChannelTypeGuildText     ChannelType = 0
-	ChannelTypeDM            ChannelType = 1
-	ChannelTypeGuildVoice    ChannelType = 2
-	ChannelTypeGroupDM       ChannelType = 3
-	ChannelTypeGuildCategory ChannelType = 4
-	ChannelTypeGuildLink     ChannelType = 998
-	ChannelTypePersonalNotes ChannelType = 999
+	ChannelTypeGuildText          ChannelType = 0
+	ChannelTypeDM                 ChannelType = 1
+	ChannelTypeGuildVoice         ChannelType = 2
+	ChannelTypeGroupDM            ChannelType = 3
+	ChannelTypeGuildCategory      ChannelType = 4
+	ChannelTypeGuildAnnouncement  ChannelType = 5
+	ChannelTypeAnnouncementThread ChannelType = 10
+	ChannelTypePublicThread       ChannelType = 11
+	ChannelTypePrivateThread      ChannelType = 12
+	ChannelTypeGuildForum         ChannelType = 15
+	ChannelTypeGuildMedia         ChannelType = 16
+	ChannelTypeGuildLink          ChannelType = 998
+	ChannelTypePersonalNotes      ChannelType = 999
 )
 
 var guildChannelTypes = [...]bool{
@@ -241,6 +249,14 @@ type ChannelPermOverwrite struct {
 	Allow Perms                    `json:"allow"`
 	Deny  Perms                    `json:"deny"`
 }
+
+type ChannelFlags uint
+
+const (
+	ChannelFlagPinned                   ChannelFlags = 1 << 1
+	ChannelFlagRequireTag               ChannelFlags = 1 << 4
+	ChannelFlagHideMediaDownloadOptions ChannelFlags = 1 << 15
+)
 
 type Message struct {
 	// ID is the globally unique identifier for the message.
