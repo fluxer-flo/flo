@@ -19,8 +19,9 @@ const _UserNotifSettings_name = "UserNotifSettingsAllMessagesUserNotifSettingsOn
 var _UserNotifSettings_index = [...]uint8{0, 28, 57, 84, 108}
 
 func (i UserNotifSettings) String() string {
-	if i >= UserNotifSettings(len(_UserNotifSettings_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_UserNotifSettings_index)-1 {
 		return "UserNotifSettings(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _UserNotifSettings_name[_UserNotifSettings_index[i]:_UserNotifSettings_index[i+1]]
+	return _UserNotifSettings_name[_UserNotifSettings_index[idx]:_UserNotifSettings_index[idx+1]]
 }

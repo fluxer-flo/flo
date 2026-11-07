@@ -18,10 +18,11 @@ const _GuildSplashCardAlignment_name = "GuildSplashCardAlignCenterGuildSplashCar
 var _GuildSplashCardAlignment_index = [...]uint8{0, 26, 50, 75}
 
 func (i GuildSplashCardAlignment) String() string {
-	if i >= GuildSplashCardAlignment(len(_GuildSplashCardAlignment_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_GuildSplashCardAlignment_index)-1 {
 		return "GuildSplashCardAlignment(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _GuildSplashCardAlignment_name[_GuildSplashCardAlignment_index[i]:_GuildSplashCardAlignment_index[i+1]]
+	return _GuildSplashCardAlignment_name[_GuildSplashCardAlignment_index[idx]:_GuildSplashCardAlignment_index[idx+1]]
 }
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
@@ -39,10 +40,11 @@ const _GuildVerifLevel_name = "GuildVerifLevelNoneGuildVerifLevelLowGuildVerifLe
 var _GuildVerifLevel_index = [...]uint8{0, 19, 37, 58, 77, 101}
 
 func (i GuildVerifLevel) String() string {
-	if i >= GuildVerifLevel(len(_GuildVerifLevel_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_GuildVerifLevel_index)-1 {
 		return "GuildVerifLevel(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _GuildVerifLevel_name[_GuildVerifLevel_index[i]:_GuildVerifLevel_index[i+1]]
+	return _GuildVerifLevel_name[_GuildVerifLevel_index[idx]:_GuildVerifLevel_index[idx+1]]
 }
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
@@ -57,10 +59,11 @@ const _GuildMFALevel_name = "GuildMFALevelNoneGuildMFALevelElevated"
 var _GuildMFALevel_index = [...]uint8{0, 17, 38}
 
 func (i GuildMFALevel) String() string {
-	if i >= GuildMFALevel(len(_GuildMFALevel_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_GuildMFALevel_index)-1 {
 		return "GuildMFALevel(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _GuildMFALevel_name[_GuildMFALevel_index[i]:_GuildMFALevel_index[i+1]]
+	return _GuildMFALevel_name[_GuildMFALevel_index[idx]:_GuildMFALevel_index[idx+1]]
 }
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
@@ -77,10 +80,11 @@ const _GuildNSFWLevel_name = "GuildNSFWLevelDefaultGuildNSFWLevelExplicitGuildNS
 var _GuildNSFWLevel_index = [...]uint8{0, 21, 43, 61, 88}
 
 func (i GuildNSFWLevel) String() string {
-	if i >= GuildNSFWLevel(len(_GuildNSFWLevel_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_GuildNSFWLevel_index)-1 {
 		return "GuildNSFWLevel(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _GuildNSFWLevel_name[_GuildNSFWLevel_index[i]:_GuildNSFWLevel_index[i+1]]
+	return _GuildNSFWLevel_name[_GuildNSFWLevel_index[idx]:_GuildNSFWLevel_index[idx+1]]
 }
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
@@ -96,8 +100,9 @@ const _GuildExplicitContentFilter_name = "GuildExplicitContentFilterDisabledGuil
 var _GuildExplicitContentFilter_index = [...]uint8{0, 34, 79, 115}
 
 func (i GuildExplicitContentFilter) String() string {
-	if i >= GuildExplicitContentFilter(len(_GuildExplicitContentFilter_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_GuildExplicitContentFilter_index)-1 {
 		return "GuildExplicitContentFilter(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _GuildExplicitContentFilter_name[_GuildExplicitContentFilter_index[i]:_GuildExplicitContentFilter_index[i+1]]
+	return _GuildExplicitContentFilter_name[_GuildExplicitContentFilter_index[idx]:_GuildExplicitContentFilter_index[idx+1]]
 }

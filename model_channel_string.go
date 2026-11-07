@@ -13,27 +13,43 @@ func _() {
 	_ = x[ChannelTypeGuildVoice-2]
 	_ = x[ChannelTypeGroupDM-3]
 	_ = x[ChannelTypeGuildCategory-4]
+	_ = x[ChannelTypeGuildAnnouncement-5]
+	_ = x[ChannelTypeAnnouncementThread-10]
+	_ = x[ChannelTypePublicThread-11]
+	_ = x[ChannelTypePrivateThread-12]
+	_ = x[ChannelTypeGuildForum-15]
+	_ = x[ChannelTypeGuildMedia-16]
 	_ = x[ChannelTypeGuildLink-998]
 	_ = x[ChannelTypePersonalNotes-999]
 }
 
 const (
-	_ChannelType_name_0 = "ChannelTypeGuildTextChannelTypeDMChannelTypeGuildVoiceChannelTypeGroupDMChannelTypeGuildCategory"
-	_ChannelType_name_1 = "ChannelTypeGuildLinkChannelTypeDMPersonalNotes"
+	_ChannelType_name_0 = "ChannelTypeGuildTextChannelTypeDMChannelTypeGuildVoiceChannelTypeGroupDMChannelTypeGuildCategoryChannelTypeGuildAnnouncement"
+	_ChannelType_name_1 = "ChannelTypeAnnouncementThreadChannelTypePublicThreadChannelTypePrivateThread"
+	_ChannelType_name_2 = "ChannelTypeGuildForumChannelTypeGuildMedia"
+	_ChannelType_name_3 = "ChannelTypeGuildLinkChannelTypePersonalNotes"
 )
 
 var (
-	_ChannelType_index_0 = [...]uint8{0, 20, 33, 54, 72, 96}
-	_ChannelType_index_1 = [...]uint8{0, 20, 46}
+	_ChannelType_index_0 = [...]uint8{0, 20, 33, 54, 72, 96, 124}
+	_ChannelType_index_1 = [...]uint8{0, 29, 52, 76}
+	_ChannelType_index_2 = [...]uint8{0, 21, 42}
+	_ChannelType_index_3 = [...]uint8{0, 20, 44}
 )
 
 func (i ChannelType) String() string {
 	switch {
-	case i <= 4:
+	case i <= 5:
 		return _ChannelType_name_0[_ChannelType_index_0[i]:_ChannelType_index_0[i+1]]
+	case 10 <= i && i <= 12:
+		i -= 10
+		return _ChannelType_name_1[_ChannelType_index_1[i]:_ChannelType_index_1[i+1]]
+	case 15 <= i && i <= 16:
+		i -= 15
+		return _ChannelType_name_2[_ChannelType_index_2[i]:_ChannelType_index_2[i+1]]
 	case 998 <= i && i <= 999:
 		i -= 998
-		return _ChannelType_name_1[_ChannelType_index_1[i]:_ChannelType_index_1[i+1]]
+		return _ChannelType_name_3[_ChannelType_index_3[i]:_ChannelType_index_3[i+1]]
 	default:
 		return "ChannelType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
@@ -51,10 +67,11 @@ const _ChannelPermOverwriteType_name = "ChannelPermOverwriteTypeRoleChannelPermO
 var _ChannelPermOverwriteType_index = [...]uint8{0, 28, 58}
 
 func (i ChannelPermOverwriteType) String() string {
-	if i >= ChannelPermOverwriteType(len(_ChannelPermOverwriteType_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_ChannelPermOverwriteType_index)-1 {
 		return "ChannelPermOverwriteType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _ChannelPermOverwriteType_name[_ChannelPermOverwriteType_index[i]:_ChannelPermOverwriteType_index[i+1]]
+	return _ChannelPermOverwriteType_name[_ChannelPermOverwriteType_index[idx]:_ChannelPermOverwriteType_index[idx+1]]
 }
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
@@ -103,8 +120,9 @@ const _MessageReferenceType_name = "MessageReferenceTypeDefaultMessageReferenceT
 var _MessageReferenceType_index = [...]uint8{0, 27, 54}
 
 func (i MessageReferenceType) String() string {
-	if i >= MessageReferenceType(len(_MessageReferenceType_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_MessageReferenceType_index)-1 {
 		return "MessageReferenceType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _MessageReferenceType_name[_MessageReferenceType_index[i]:_MessageReferenceType_index[i+1]]
+	return _MessageReferenceType_name[_MessageReferenceType_index[idx]:_MessageReferenceType_index[idx+1]]
 }
