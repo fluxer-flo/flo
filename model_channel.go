@@ -54,6 +54,16 @@ type Channel struct {
 	Nicks map[ID]string `json:"nicks"`
 	// Flags is the set of flags on the channel.
 	Flags ChannelFlags `json:"flags"`
+	// ThreadMetadata holds the thread-specific metadata for the channel. This is only available for threads.
+	ThreadMetadata *ThreadMetadata `json:"thread_metadata"`
+	// MessageCount holds the number of messages which exist in the channel. This is only available for threads.
+	MessageCount *int `json:"message_count"`
+	// TotalMessageSent holds the total number of messages which were ever sent in the channel, even if they were deleted. This is only available for threads.
+	TotalMessagesSent *int `json:"total_message_sent"`
+	// MemberCount holds the number of members in the channel if it is a thread (up to 50).
+	MemberCount *int `json:"member_count"`
+	// AppliedTags holds the tags applied to the channel, for forum posts.
+	AppliedTags []ID `json:"applied_tags"`
 
 	Messages *Collection[Message]
 }
@@ -257,6 +267,15 @@ const (
 	ChannelFlagRequireTag               ChannelFlags = 1 << 4
 	ChannelFlagHideMediaDownloadOptions ChannelFlags = 1 << 15
 )
+
+type ThreadMetadata struct {
+	Archived         bool       `json:"archived"`
+	AutoArchiveMins  int        `json:"auto_archive_duration"`
+	ArchiveTimestamp *time.Time `json:"archive_timestamp"`
+	Locked           bool       `json:"locked"`
+	Invitable        bool       `json:"invitable"`
+	CreateTimestamp  time.Time  `json:"create_timestamp"`
+}
 
 type Message struct {
 	// ID is the globally unique identifier for the message.
