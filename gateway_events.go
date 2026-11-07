@@ -151,7 +151,7 @@ func (e *MessageCreateEvent) Channel(cache *Cache) (Channel, bool) {
 			return Channel{}, false
 		}
 
-		return guild.Channels.Get(e.ChannelID)
+		return guild.ChannelOrThread(e.ChannelID)
 	} else {
 		return cache.Channel(e.ChannelID)
 	}
@@ -214,7 +214,7 @@ func (e *MessageDeleteEvent) Channel(cache *Cache) (Channel, bool) {
 			return Channel{}, false
 		}
 
-		return guild.Channels.Get(e.ChannelID)
+		return guild.ChannelOrThread(e.ChannelID)
 	} else {
 		return cache.Channel(e.ChannelID)
 	}

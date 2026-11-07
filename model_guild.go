@@ -137,6 +137,16 @@ func (g *Guild) Update(ctx context.Context, rest *REST, opts UpdateGuildOpts) er
 	return nil
 }
 
+func (g *Guild) ChannelOrThread(id ID) (Channel, bool) {
+	if channel, ok := g.Channels.Get(id); ok {
+		return channel, ok
+	}
+	if thread, ok := g.Threads.Get(id); ok {
+		return thread, ok
+	}
+	return Channel{}, false
+}
+
 func (g *Guild) CreateChannel(ctx context.Context, rest *REST, opts CreateGuildChannelOpts) (Channel, error) {
 	return rest.CreateGuildChannel(ctx, g.ID, opts)
 }
