@@ -397,3 +397,71 @@ func (r *REST) RemoveAllReactions(ctx context.Context, channelID ID, messageID I
 		Bucket: fmt.Sprintf("channel:reactions:%d", channelID),
 	})
 }
+
+type CreateThreadOpts struct {
+	Name            string      `json:"name"`
+	Type            ChannelType `json:"type"`
+	AutoArchiveMins *int        `json:"auto_archive_duration,omitempty"`
+	RateLimitSecs   *int        `json:"rate_limit_per_user,omitempty"`
+	Invitable       *bool       `json:"invitable,omitempty"`
+}
+
+// CreateThread creates a thread for a text or announcement channel.
+func (r *REST) CreateThread(ctx context.Context, channelID ID, opts CreateThreadOpts) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/threads", channelID),
+		Bucket:  fmt.Sprintf("channel:thread:create:%d", channelID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	cacheThread(&resp, r.Cache)
+	return resp, nil
+}
+
+// CreateThreadFromMessage creates a thread for a text or announcement channel from an existing message.
+func (r *REST) CreateThreadFromMessage(ctx context.Context, channelID ID, messageID ID, opts CreateThreadOpts) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/messages/%d/threads", channelID, messageID),
+		Bucket:  fmt.Sprintf("channel:thread:create:%d", channelID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	cacheThread(&resp, r.Cache)
+	return resp, nil
+}
+
+type CreateForumPostOpts struct {
+	Name            string            `json:"name"`
+	Message         CreateMessageOpts `json:"message"`
+	AppliedTags     []ID              `json:"applied_tags,omitempty"`
+	AutoArchiveMins *int              `json:"auto_archive_duration,omitempty"`
+	RateLimitSecs   *int              `json:"rate_limit_per_user,omitempty"`
+	Invitable       *bool             `json:"invitable,omitempty"`
+}
+
+func (r *REST) CreateForumPost(ctx context.Context, channelID ID, opts CreateForumPostOpts) (Channel, error) {
+	var resp Channel
+	err := r.RequestJSON(ctx, RESTRequest{
+		Method:  "POST",
+		Path:    fmt.Sprintf("/v1/channels/%d/threads", channelID),
+		Bucket:  fmt.Sprintf("channel:thread:create:%d", channelID),
+		Payload: opts,
+	}, &resp)
+	if err != nil {
+		return Channel{}, err
+	}
+
+	cacheThread(&resp, r.Cache)
+	return resp, nil
+
+}
