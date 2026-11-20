@@ -46,7 +46,7 @@ type REST struct {
 // DefaultAPIURL is the default value for [REST.BaseURL].
 // It points to the current base URL for API requests to the main Fluxer instance.
 var DefaultAPIURL = func() *url.URL {
-	result, err := url.Parse("https://api.fluxer.app/")
+	result, err := url.Parse("https://fluxer.com/api/")
 	if err != nil {
 		panic(err)
 	}

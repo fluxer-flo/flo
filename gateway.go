@@ -65,7 +65,7 @@ type Gateway struct {
 // DefaultGatewayURL is the default value for [Gateway.ConnURL].
 // It points to the current gateway URL of the main Fluxer instance.
 var DefaultGatewayURL = func() *url.URL {
-	result, err := url.Parse("wss://gateway.fluxer.app")
+	result, err := url.Parse("wss://gateway.fluxer.com")
 	if err != nil {
 		panic(err)
 	}
